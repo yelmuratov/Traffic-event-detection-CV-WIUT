@@ -24,7 +24,7 @@ from src.video import probe  # noqa: E402
 
 def skeleton(video_dir: str) -> dict:
     out = {}
-    for p in sorted(glob.glob(os.path.join(video_dir, "*.mp4"))):
+    for p in sorted(p for p in glob.glob(os.path.join(video_dir, "*")) if p.lower().endswith(".mp4")):
         m = probe(p)
         out[m.name] = {"duration": round(m.duration, 3), "fps": m.fps, "events": []}
     return out

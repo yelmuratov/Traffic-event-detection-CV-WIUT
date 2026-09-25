@@ -71,7 +71,7 @@ def counts_over_time(df: pd.DataFrame, bin_s: float = 5.0) -> pd.DataFrame:
 
 def run(video_dir: str, out_dir: str):
     os.makedirs(out_dir, exist_ok=True)
-    paths = sorted(glob.glob(os.path.join(video_dir, "*.mp4")))
+    paths = sorted(p for p in glob.glob(os.path.join(video_dir, "*")) if p.lower().endswith(".mp4"))
     meta_df = metadata(paths)
     meta_df.to_csv(os.path.join(out_dir, "metadata.csv"), index=False)
     print(meta_df.to_string(index=False))

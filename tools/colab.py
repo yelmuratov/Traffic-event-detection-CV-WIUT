@@ -118,6 +118,39 @@ def download_with_gdown(links: list[str], local_dir: str) -> list[str]:
     return out
 
 
+def _lower_ext(name: str) -> str:
+    """C3896.MP4 -> C3896.mp4 (Linux globs are case-sensitive; tools and harness look for *.mp4)."""
+    stem, ext = os.path.splitext(name)
+    return stem + ext.lower()
+
+
+def download_via_api(links: list[str], local_dir: str, chunk_mb: int = 256) -> list[str]:
+    """Authenticated Drive API download straight to the Colab disk. Nothing is stored in your
+    Drive (use when your Drive is full). Not subject to the public-link download quota."""
+    import io
+    from googleapiclient.http import MediaIoBaseDownload
+    svc = drive_service()
+    os.makedirs(local_dir, exist_ok=True)
+    out = []
+    for link in links:
+        fid = file_id(link)
+        meta = svc.files().get(fileId=fid, fields="name, size", supportsAllDrives=True).execute()
+        dst = os.path.join(local_dir, _lower_ext(meta["name"]))
+        out.append(dst)
+        if os.path.exists(dst) and os.path.getsize(dst) == int(meta["size"]):
+            print(f"✓ {os.path.basename(dst)} already on local disk"); continue
+        t0 = time.time()
+        req = svc.files().get_media(fileId=fid, supportsAllDrives=True)
+        with io.FileIO(dst, "wb") as fh:
+            dl = MediaIoBaseDownload(fh, req, chunksize=chunk_mb * 2**20)
+            done = False
+            while not done:
+                status, done = dl.next_chunk()
+                print(f"\r{meta['name']}: {status.progress() * 100:5.1f}%", end="", flush=True)
+        print(f"  done in {time.time() - t0:.0f}s")
+    return out
+
+
 def copy_local(src_paths: list[str], local_dir: str) -> list[str]:
     """Drive mount -> local SSD once per session (fast random access for decoding)."""
     os.makedirs(local_dir, exist_ok=True)
@@ -125,7 +158,7 @@ def copy_local(src_paths: list[str], local_dir: str) -> list[str]:
     for src in src_paths:
         if not os.path.exists(src):
             continue
-        dst = os.path.join(local_dir, os.path.basename(src))
+        dst = os.path.join(local_dir, _lower_ext(os.path.basename(src)))
         if not (os.path.exists(dst) and os.path.getsize(dst) == os.path.getsize(src)):
             t0 = time.time()
             print(f"copying {os.path.basename(src)} to local disk...", end=" ", flush=True)
