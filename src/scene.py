@@ -245,8 +245,8 @@ def video_homography(video_path: str) -> np.ndarray | None:
             import logging
             logging.getLogger("wiut.scene").info("%s: scene alignment %d inliers, max shift %.1f px",
                                                   video_path.split("/")[-1], inl, shift)
-            if shift < 3.0:
-                H = None  # same view: keep the map exactly as drawn
+            if shift < 10.0:
+                H = None  # same view (a few px of estimation noise at 4K): keep the map exactly as drawn
         else:
             H = None
     _H_CACHE[video_path] = H

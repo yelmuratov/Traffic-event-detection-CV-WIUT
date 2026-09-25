@@ -190,6 +190,9 @@ def rule_signals(ctx: Ctx):
             tc = t[i] + (t[i + 1] - t[i]) * (-side[i]) / max(side[i + 1] - side[i], 1e-6)
             if not (sig(tc)[0] == 1 and sig(tc - R["red_light"]["red_before_s"])[0] == 1):
                 continue
+            if g["speed_n"].to_numpy()[max(0, i - 2): i + 3].max() < R["red_light"]["min_speed"] and \
+                    _first_stationary_after(g.iloc[i + 1:], tc) is None:
+                continue  # jitter of a waiting car around the line, not a real crossing
             after = g.iloc[i + 1:]
             if sl["intersection"] is not None:
                 inside = sl["intersection"].contains(after["gx"].to_numpy(), after["gy"].to_numpy())
@@ -236,6 +239,7 @@ def rule_failure_to_yield(ctx: Ctx):
         pin = ped[cw.contains(ped["gx"].to_numpy(), ped["gy"].to_numpy(), c["ped_buffer_px"])]
         if pin.empty:
             continue
+        pin = pin[pin["speed_n"] > c["ped_min_speed"]]      # walking, not waiting at the curb
         ped_by_frame = {f: g_[["gx", "gy"]].to_numpy() for f, g_ in pin.groupby("frame")}
         for tid, g in ctx.vehicles.groupby("tid"):
             m = cw.contains(g["gx"].to_numpy(), g["gy"].to_numpy())
@@ -245,7 +249,7 @@ def rule_failure_to_yield(ctx: Ctx):
             fr, gx, gy, w = (g[k].to_numpy() for k in ("frame", "gx", "gy", "w"))
             for a, b in runs(m, t, max_gap=0.5):
                 sel = (t >= a) & (t <= b)
-                moving = g["speed_n"].to_numpy()[sel].max() > c["min_vehicle_speed"]
+                moving = np.median(g["speed_n"].to_numpy()[sel]) > c["min_vehicle_speed"]  # drives through, not creeping
                 ped_near = False
                 for i in np.flatnonzero(sel):
                     P = ped_by_frame.get(fr[i])
