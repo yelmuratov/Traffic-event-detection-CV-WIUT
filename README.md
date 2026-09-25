@@ -1,5 +1,7 @@
 # WIUT Hackathon 2026 — CV Track: Traffic Event Detection
 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/yelmuratov/Traffic-event-detection-CV-WIUT/blob/main/notebooks/WIUT_CV_Colab.ipynb)
+
 Fixed CCTV camera → list of traffic events `[start_sec, end_sec, label]` (Part A) and a causal
 per-frame accident risk (Part B).
 
