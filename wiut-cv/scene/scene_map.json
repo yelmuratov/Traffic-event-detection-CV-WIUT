@@ -1,0 +1,16 @@
+{
+ "size": [
+  1920,
+  1080
+ ],
+ "road": [],
+ "lanes": [],
+ "crosswalks": [],
+ "stop_lines": [],
+ "signals": {},
+ "solid_lines": [],
+ "queue_zones": [],
+ "ignore_zones": [],
+ "forbidden_movements": [],
+ "no_u_turn_zones": []
+}

@@ -1,0 +1,10 @@
+# Python >= 3.10. Tested with CUDA 12 on T4 (Colab).
+ultralytics==8.4.162
+torch>=2.2
+torchvision>=0.17
+opencv-python-headless>=4.8
+numpy>=1.24
+pandas>=2.0
+matplotlib>=3.7
+lap>=0.5.12
+pyyaml>=6.0
