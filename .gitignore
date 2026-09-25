@@ -5,3 +5,5 @@ samples/
 cache/
 outputs/
 .ipynb_checkpoints/
+
+Claude outputs/
