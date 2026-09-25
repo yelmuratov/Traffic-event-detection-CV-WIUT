@@ -171,10 +171,129 @@ class Scene:
         return out
 
 
-def load_scene(width: int, height: int, path: Path | str | None = None) -> Scene:
+def load_scene(width: int, height: int, path: Path | str | None = None, video_path: str | None = None) -> Scene:
+    """Load the scene map. With `video_path`, the map is re-projected onto that video: the camera
+    is 'fixed' but clips differ slightly in pan/zoom, so a homography between the reference frame
+    the map was drawn on (scene/ref_frame.jpg) and this video's background is estimated."""
     path = Path(path or config.SCENE_PATH)
     data = json.loads(path.read_text()) if path.exists() else None
+    if data and video_path and config.REF_FRAME_PATH.exists():
+        H = video_homography(video_path)
+        if H is not None:
+            data = warp_scene(data, H, width, height)
     return Scene(data, width, height)
+
+
+# ============================================================ per-video alignment
+_H_CACHE: dict = {}
+
+
+def background_frame(video_path: str, times=(0.5, 2.0, 4.0, 6.0, 8.0), max_w: int = 1600) -> np.ndarray | None:
+    """Median of a few frames: moving traffic disappears, the static scene stays."""
+    cap = cv2.VideoCapture(video_path)
+    fr = []
+    for t in times:
+        cap.set(cv2.CAP_PROP_POS_MSEC, t * 1000)
+        ok, f = cap.read()
+        if ok:
+            s = max_w / f.shape[1]
+            fr.append(cv2.resize(f, None, fx=s, fy=s, interpolation=cv2.INTER_AREA))
+    cap.release()
+    return np.median(np.stack(fr), axis=0).astype(np.uint8) if fr else None
+
+
+def estimate_homography(ref: np.ndarray, img: np.ndarray) -> tuple[np.ndarray | None, int]:
+    """Homography mapping ref pixel coords -> img pixel coords (both given at their own size)."""
+    w = 1600
+    sr, si = w / ref.shape[1], w / img.shape[1]
+    g1 = cv2.cvtColor(cv2.resize(ref, None, fx=sr, fy=sr, interpolation=cv2.INTER_AREA), cv2.COLOR_BGR2GRAY)
+    g2 = cv2.cvtColor(cv2.resize(img, None, fx=si, fy=si, interpolation=cv2.INTER_AREA), cv2.COLOR_BGR2GRAY)
+    sift = cv2.SIFT_create(nfeatures=5000)
+    k1, d1 = sift.detectAndCompute(g1, None)
+    k2, d2 = sift.detectAndCompute(g2, None)
+    if d1 is None or d2 is None or len(k1) < 30 or len(k2) < 30:
+        return None, 0
+    good = [m for m, n in cv2.BFMatcher(cv2.NORM_L2).knnMatch(d1, d2, k=2) if m.distance < 0.7 * n.distance]
+    if len(good) < 30:
+        return None, len(good)
+    p1 = np.float32([k1[m.queryIdx].pt for m in good])
+    p2 = np.float32([k2[m.trainIdx].pt for m in good])
+    cv2.setRNGSeed(config.SEED)  # deterministic RANSAC
+    Hs, mask = cv2.findHomography(p1, p2, cv2.RANSAC, 3.0, maxIters=5000)
+    if Hs is None:
+        return None, 0
+    Sr, Si = np.diag([sr, sr, 1.0]), np.diag([si, si, 1.0])
+    return np.linalg.inv(Si) @ Hs @ Sr, int(mask.sum())
+
+
+def video_homography(video_path: str) -> np.ndarray | None:
+    """Cached ref->video homography; None when the view is identical (or alignment fails)."""
+    if video_path in _H_CACHE:
+        return _H_CACHE[video_path]
+    ref = cv2.imread(str(config.REF_FRAME_PATH))
+    bg = background_frame(video_path)
+    H = None
+    if ref is not None and bg is not None:
+        full = cv2.VideoCapture(video_path)
+        W, Hh = int(full.get(cv2.CAP_PROP_FRAME_WIDTH)), int(full.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        full.release()
+        bg_full = cv2.resize(bg, (W, Hh), interpolation=cv2.INTER_LINEAR)
+        H, inl = estimate_homography(ref, bg_full)
+        corners = np.float32([[0, 0], [W, 0], [W, Hh], [0, Hh]]).reshape(-1, 1, 2)
+        if H is not None and inl >= 40:
+            shift = np.abs(cv2.perspectiveTransform(corners, H) - corners).max()
+            import logging
+            logging.getLogger("wiut.scene").info("%s: scene alignment %d inliers, max shift %.1f px",
+                                                  video_path.split("/")[-1], inl, shift)
+            if shift < 3.0:
+                H = None  # same view: keep the map exactly as drawn
+        else:
+            H = None
+    _H_CACHE[video_path] = H
+    return H
+
+
+def warp_scene(data: dict, H: np.ndarray, width: int, height: int) -> dict:
+    """Apply homography H (reference -> this video) to every coordinate in the scene map."""
+    ref_w, ref_h = data.get("size") or [width, height]
+    # the map may have been drawn at another resolution than the reference frame file
+    ref_img_size = cv2.imread(str(config.REF_FRAME_PATH)).shape[1::-1]
+    S = np.diag([ref_img_size[0] / ref_w, ref_img_size[1] / ref_h, 1.0])
+    Hm = H @ S
+
+    def pts(p):
+        a = np.asarray(p, np.float32).reshape(-1, 1, 2)
+        return cv2.perspectiveTransform(a, Hm).reshape(-1, 2).round(1).tolist()
+
+    def direction(d, at):
+        a = np.asarray(at, float).reshape(-1, 2).mean(0)
+        q = pts([a, a + 50 * np.asarray(d, float)])
+        v = np.subtract(q[1], q[0])
+        return (v / max(np.linalg.norm(v), 1e-6)).round(4).tolist()
+
+    def box(b):
+        x1, y1, x2, y2 = b
+        c = np.asarray(pts([[x1, y1], [x2, y1], [x2, y2], [x1, y2]]))
+        return [int(c[:, 0].min()), int(c[:, 1].min()), int(np.ceil(c[:, 0].max())), int(np.ceil(c[:, 1].max()))]
+
+    d = json.loads(json.dumps(data))
+    for k in ("road", "crosswalks", "queue_zones", "ignore_zones", "no_u_turn_zones", "solid_lines"):
+        d[k] = [pts(p) for p in d.get(k, [])]
+    for lane in d.get("lanes", []):
+        if lane.get("direction"):
+            lane["direction"] = direction(lane["direction"], lane["polygon"])
+        lane["polygon"] = pts(lane["polygon"])
+    for s in d.get("stop_lines", []):
+        s["direction"] = direction(s["direction"], s["line"])
+        s["line"] = pts(s["line"])
+        if s.get("intersection"):
+            s["intersection"] = pts(s["intersection"])
+    for m in d.get("forbidden_movements", []):
+        m["from"], m["to"] = pts(m["from"]), pts(m["to"])
+    for name, sig in d.get("signals", {}).items():
+        d["signals"][name] = {k: box(v) for k, v in sig.items()}
+    d["size"] = [width, height]
+    return d
 
 
 # ============================================================ traffic-light state

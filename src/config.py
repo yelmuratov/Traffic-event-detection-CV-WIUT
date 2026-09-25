@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parent.parent
 WEIGHTS_DIR = ROOT / "weights"
 SCENE_PATH = ROOT / "scene" / "scene_map.json"
 FLOW_MAP_PATH = ROOT / "scene" / "flow_map.npz"
+REF_FRAME_PATH = ROOT / "scene" / "ref_frame.jpg"   # frame the scene map was drawn on
 
 SEED = 42
 DEMO = os.environ.get("WIUT_DEMO", "0") == "1"
@@ -100,17 +101,17 @@ ENABLED = {
 
 RULES = {
     "stopped_vehicle": {"min_s": 10.0, "merge_gap_s": 3.0, "min_neighbors_moving": 1},
-    "congestion": {"min_vehicles": 4, "max_median_speed": 0.3, "min_s": 20.0, "smooth_s": 3.0},
+    "congestion": {"min_vehicles": 4, "max_median_speed": 0.3, "min_s": 75.0, "smooth_s": 3.0},  # longer than a red phase
     "wrong_way": {"cos": -0.5, "min_s": 1.5, "min_speed": 0.5, "flow_min_count": 20, "flow_min_coherence": 0.7},
     "red_light": {"red_before_s": 0.3, "max_s": 8.0},
     "stop_line": {"max_after_stop_s": 90.0},
-    "jaywalking": {"min_s": 1.0, "crosswalk_buffer_px": 15, "rider_overlap": 0.3},
-    "failure_to_yield": {"ped_buffer_px": 20, "min_vehicle_speed": 0.3},
+    "jaywalking": {"min_s": 2.0, "crosswalk_buffer_px": 60, "rider_overlap": 0.3, "min_speed": 0.3},
+    "failure_to_yield": {"ped_buffer_px": 20, "min_vehicle_speed": 0.3, "near_w": 1.5},  # ped within 1.5 car widths
     "solid_line": {"min_cross_px": 5, "max_s": 6.0},
     "turn": {"turn_deg": 60, "u_turn_deg": 150, "window_s": 12.0, "onset_deg": 10},
-    "near_miss": {"ttc_s": 1.0, "decel_frac": 0.4, "swerve_deg": 25, "react_s": 1.5, "min_speed": 0.8},
-    "accident": {"contact_iou": 0.05, "depth_frac": 0.2, "min_closing": 0.5, "stop_within_s": 3.0,
-                 "max_s": 30.0, "min_speed_before": 0.6},
+    "near_miss": {"ttc_s": 0.7, "decel_frac": 0.5, "swerve_deg": 25, "react_s": 1.5, "min_speed": 1.2},
+    "accident": {"contact_iou": 0.15, "depth_frac": 0.12, "min_closing": 0.5, "stop_within_s": 3.0,
+                 "max_s": 30.0, "min_speed_before": 1.0, "hold_s": 1.0, "hold_frac": 0.6},
 }
 
 # Segment post-processing per class: merge gaps, minimum length, boundary shifts

@@ -20,7 +20,7 @@ def analyse(video_path: str, progress: bool = False):
     """Everything up to the rules; returned so notebooks can inspect intermediate data."""
     set_seed(config.SEED)
     meta = probe(video_path)
-    scene = load_scene(meta.width, meta.height)
+    scene = load_scene(meta.width, meta.height, video_path=video_path)
     tracks, signals = analyse_video(meta, scene, progress=progress)
     df = build_table(tracks, meta.fps)
     ctx = Ctx(df=df, scene=scene, signals=signals, fps=meta.fps, duration=meta.duration)

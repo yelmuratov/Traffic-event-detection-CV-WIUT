@@ -35,7 +35,7 @@ def make_ctx(rows, scene_dict, signals=None, duration=60.0):
     scene = Scene(scene_dict, W, H)
     scene.flow = None
     df = build_table(np.asarray(rows, np.float32), FPS)
-    return Ctx(df=df, scene=scene, signals=signals or {}, fps=FPS, duration=duration)
+    return Ctx(df=df, scene=scene, signals=signals or {}, fps=FPS, duration=max(duration, 120.0))
 
 
 def lin(p0, v, ts):
@@ -97,9 +97,9 @@ def test_forbidden_turn():
 def test_congestion():
     rows = []
     for k in range(6):
-        rows += track(k + 1, 2, [(t, (200 + 150 * k + 2 * t, 500)) for t in times(0, 40)])
+        rows += track(k + 1, 2, [(t, (200 + 150 * k + 2 * t, 500)) for t in times(0, 100)])
     ev = rule_congestion(make_ctx(rows, {}))
-    assert len(ev) == 1 and ev[0][1] - ev[0][0] > 30
+    assert len(ev) == 1 and ev[0][1] - ev[0][0] > 90
 
 
 def test_postprocess_valid():

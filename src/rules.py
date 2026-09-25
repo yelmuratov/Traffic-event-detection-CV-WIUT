@@ -132,7 +132,10 @@ def rule_congestion(ctx: Ctx):
     v = ctx.vehicles
     if v.empty:
         return []
-    v = v[ctx.scene.on_road(v["gx"].to_numpy(), v["gy"].to_numpy())].copy()
+    keep = ctx.scene.on_road(v["gx"].to_numpy(), v["gy"].to_numpy())
+    if ctx.scene.queue_zones:
+        keep &= ~ctx.scene.in_queue_zone(v["gx"].to_numpy(), v["gy"].to_numpy())
+    v = v[keep].copy()
     v["group"] = ctx.scene.lane_group(v["gx"].to_numpy(), v["gy"].to_numpy())
     out = []
     all_t = np.sort(ctx.df["t"].unique())
@@ -215,7 +218,11 @@ def rule_jaywalking(ctx: Ctx):
     for tid, g in ctx.pedestrians.groupby("tid"):
         x, y = g["gx"].to_numpy(), g["gy"].to_numpy()
         m = ctx.scene.on_road(x, y) & ~ctx.scene.in_crosswalk(x, y, c["crosswalk_buffer_px"])
-        for a, b in runs(m, g["t"].to_numpy(), max_gap=1.0, min_len=c["min_s"]):
+        t = g["t"].to_numpy()
+        for a, b in runs(m, t, max_gap=1.0, min_len=c["min_s"]):
+            sel = (t >= a) & (t <= b)
+            if np.median(g["speed_n"].to_numpy()[sel]) < c["min_speed"]:
+                continue  # standing still (waiting at the curb, street vendor, detector noise)
             out.append((a, b, "jaywalking"))
     return out
 
@@ -225,23 +232,27 @@ def rule_failure_to_yield(ctx: Ctx):
     c = R["failure_to_yield"]
     out = []
     ped = ctx.pedestrians
-    dt = config.DETECTOR["stride"] / ctx.fps
     for cw in ctx.scene.crosswalks:
         pin = ped[cw.contains(ped["gx"].to_numpy(), ped["gy"].to_numpy(), c["ped_buffer_px"])]
-        ped_t = np.sort(pin["t"].unique())
-        if len(ped_t) == 0:
+        if pin.empty:
             continue
+        ped_by_frame = {f: g_[["gx", "gy"]].to_numpy() for f, g_ in pin.groupby("frame")}
         for tid, g in ctx.vehicles.groupby("tid"):
             m = cw.contains(g["gx"].to_numpy(), g["gy"].to_numpy())
             if not m.any():
                 continue
             t = g["t"].to_numpy()
+            fr, gx, gy, w = (g[k].to_numpy() for k in ("frame", "gx", "gy", "w"))
             for a, b in runs(m, t, max_gap=0.5):
                 sel = (t >= a) & (t <= b)
                 moving = g["speed_n"].to_numpy()[sel].max() > c["min_vehicle_speed"]
-                j = np.searchsorted(ped_t, a - dt)
-                ped_present = j < len(ped_t) and ped_t[j] <= b + dt
-                if moving and ped_present:
+                ped_near = False
+                for i in np.flatnonzero(sel):
+                    P = ped_by_frame.get(fr[i])
+                    if P is not None and (np.hypot(P[:, 0] - gx[i], P[:, 1] - gy[i]) < c["near_w"] * w[i]).any():
+                        ped_near = True
+                        break
+                if moving and ped_near:
                     out.append((a, max(b, a + 0.5), "failure_to_yield"))
     return out
 
@@ -385,6 +396,17 @@ def _pair_table(ctx: Ctx) -> pd.DataFrame:
     return pt.sort_values(["a", "b", "t"]).reset_index(drop=True)
 
 
+def _in_queue(ctx: Ctx, ga: pd.DataFrame, gb: pd.DataFrame, t0: float) -> bool:
+    """Both objects inside a signal queue zone at time t0 (bumper-to-bumper waiting, not a crash)."""
+    if not ctx.scene.queue_zones:
+        return False
+    inside = []
+    for g in (ga, gb):
+        r = g.iloc[(g["t"] - t0).abs().argmin()] if len(g) else None
+        inside.append(r is not None and bool(ctx.scene.in_queue_zone([r["gx"]], [r["gy"]])[0]))
+    return all(inside)
+
+
 def _speed_at(g: pd.DataFrame, t0: float, t1: float) -> np.ndarray:
     return g[(g["t"] >= t0) & (g["t"] <= t1)]["speed_n"].to_numpy()
 
@@ -405,7 +427,10 @@ def rule_pairs(ctx: Ctx):
             pre_ok = ((t < tc - 0.5) & ~cont).any()              # seen apart before touching
             closing = g["closing"].to_numpy()[(t >= tc - 1) & (t <= tc)].max() > ca["min_closing"]
             sp_before = np.concatenate([_speed_at(ga, tc - 1, tc), _speed_at(gb, tc - 1, tc), [0]]).max()
-            if pre_ok and closing and sp_before > ca["min_speed_before"]:
+            hold = cont[(t >= tc) & (t <= tc + ca["hold_s"])]
+            held = len(hold) > 0 and hold.mean() >= ca["hold_frac"]         # boxes stay together
+            in_queue = _in_queue(ctx, ga, gb, tc)
+            if pre_ok and closing and held and not in_queue and sp_before > ca["min_speed_before"]:
                 ends = []
                 for gg in (ga, gb):
                     ts = _first_stationary_after(gg, tc)
@@ -421,6 +446,8 @@ def rule_pairs(ctx: Ctx):
             continue
         risky = np.isfinite(g["ttc"].to_numpy()) & (g["ttc"].to_numpy() < cn["ttc_s"])
         for s0, _ in runs(risky, t, max_gap=1.0):
+            if _in_queue(ctx, ga, gb, s0):
+                continue
             ev = None
             for gg in (ga, gb):
                 pre = _speed_at(gg, s0 - 0.6, s0)

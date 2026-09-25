@@ -191,38 +191,43 @@ def show(img: np.ndarray, width: int = 1100):
 
 _JS = r"""
 async function wiutPick(b64, w, h, title, mode) {
+  const need = (mode === 'polygon') ? 3 : 2;
   const div = document.createElement('div');
   div.style.cssText = 'border:1px solid #999;padding:6px;margin:4px 0;font-family:sans-serif';
-  const hint = {polygon:'click the corners, then Done', polyline:'click along the line, then Done',
-                line:'click 2 points (for a direction: start then end)', box:'click 2 opposite corners'}[mode];
-  div.innerHTML = '<b>' + title + '</b> - ' + hint + '<br>';
+  const info = document.createElement('div'); div.appendChild(info);
   const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
-  cv.style.cssText = 'cursor:crosshair;max-width:100%';
+  cv.style.cssText = 'cursor:crosshair;max-width:100%;display:block';
+  div.appendChild(cv);
   const undo = document.createElement('button'); undo.textContent = 'Undo';
   const done = document.createElement('button'); done.textContent = 'Done'; done.style.marginLeft = '8px';
-  div.appendChild(cv); div.appendChild(document.createElement('br')); div.appendChild(undo); div.appendChild(done);
+  div.appendChild(undo); div.appendChild(done);
   document.body.appendChild(div);
   const ctx = cv.getContext('2d'); const img = new Image(); const pts = [];
+  const status = () => { info.innerHTML = '<b>' + title + '</b> - points: <b>' + pts.length +
+      '</b> (need ' + need + '+). Click ON the image, then Done.'; };
   const redraw = () => {
-    ctx.drawImage(img, 0, 0, w, h); ctx.lineWidth = 2; ctx.strokeStyle = '#ff0'; ctx.fillStyle = '#f00';
+    ctx.drawImage(img, 0, 0, w, h); ctx.lineWidth = 3; ctx.strokeStyle = '#ff0'; ctx.fillStyle = '#f00';
     if (mode === 'box' && pts.length === 2) {
       ctx.strokeRect(pts[0][0], pts[0][1], pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]);
     } else if (pts.length) {
       ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
       if (mode === 'polygon' && pts.length > 2) ctx.closePath(); ctx.stroke();
-      if (mode === 'line' && pts.length === 2) { ctx.beginPath(); ctx.arc(pts[1][0], pts[1][1], 8, 0, 7); ctx.stroke(); }
     }
-    pts.forEach(p => { ctx.beginPath(); ctx.arc(p[0], p[1], 4, 0, 7); ctx.fill(); });
+    pts.forEach(p => { ctx.beginPath(); ctx.arc(p[0], p[1], 6, 0, 7); ctx.fill(); });
+    status();
   };
   await new Promise(r => { img.onload = r; img.src = 'data:image/jpeg;base64,' + b64; });
   redraw();
-  cv.onclick = e => {
+  cv.addEventListener('mousedown', e => {
     const r = cv.getBoundingClientRect();
     if ((mode === 'line' || mode === 'box') && pts.length >= 2) return;
     pts.push([(e.clientX - r.left) * w / r.width, (e.clientY - r.top) * h / r.height]); redraw();
-  };
+  });
   undo.onclick = () => { pts.pop(); redraw(); };
-  await new Promise(r => done.onclick = r);
+  await new Promise(r => { done.onclick = () => {
+    if (pts.length >= need) r();
+    else info.innerHTML = '<b style="color:#f55">Need at least ' + need + ' points - click on the image first</b>';
+  }; });
   div.innerHTML = '<i>' + title + ': ' + pts.length + ' points saved</i>';
   return JSON.stringify(pts);
 }
@@ -244,6 +249,8 @@ def pick(img: np.ndarray, title: str, mode: str = "polygon", crop=None, width: i
     b64 = base64.b64encode(cv2.imencode(".jpg", small, [cv2.IMWRITE_JPEG_QUALITY, 85])[1]).decode()
     display(Javascript(_JS))
     pts = json.loads(eval_js(f"wiutPick('{b64}', {small.shape[1]}, {small.shape[0]}, {json.dumps(title)}, '{mode}')"))
+    if len(pts) < (3 if mode == "polygon" else 2):
+        raise ValueError(f"only {len(pts)} points clicked - nothing saved, run the cell again")
     return [[round(x / s + x0, 1), round(y / s + y0, 1)] for x, y in pts]
 
 

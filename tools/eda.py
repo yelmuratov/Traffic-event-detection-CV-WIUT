@@ -79,7 +79,7 @@ def run(video_dir: str, out_dir: str):
     all_tables = []
     for p in paths:
         m = probe(p)
-        scene = load_scene(m.width, m.height)
+        scene = load_scene(m.width, m.height, video_path=p)
         tracks, _ = analyse_video(m, scene)
         df = build_table(tracks, m.fps)
         df["video"] = m.name
