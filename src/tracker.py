@@ -19,7 +19,7 @@ import numpy as np
 
 from . import config
 from .utils import set_seed
-from .video import VideoMeta, iter_frames, video_key
+from .video import VideoMeta, iter_frames, iter_frames_fast, video_key
 
 log = logging.getLogger("wiut.tracker")
 TRACK_COLS = ["frame", "t", "tid", "cls", "conf", "x1", "y1", "x2", "y2"]
@@ -95,7 +95,8 @@ def analyse_video(meta: VideoMeta, scene=None, want_tracks: bool = True, progres
     vkey = video_key(meta.path)
     tr_cfg = {"det": det, "trk": config.TRACKER, "classes": config.DET_CLASSES}
     tr_cache = _cache_path("tracks", vkey, tr_cfg)
-    sg_cache = _cache_path("signals", vkey, {"sig": signals_cfg, "stride": det["stride"]})
+    sg_cache = _cache_path("signals", vkey, {"sig": signals_cfg, "stride": det["stride"],
+                                             "decoder": det.get("decoder"), "w": det["max_width"]})
 
     tracks = signals = None
     if tr_cache and tr_cache.exists():
@@ -132,16 +133,17 @@ def analyse_video(meta: VideoMeta, scene=None, want_tracks: bool = True, progres
         batch.clear()
 
     # signals need full-res crops, so keep full frames and let the model resize
-    max_w = None if need_signals and signals_cfg else det["max_width"]
-    for fi, t, frame, s in iter_frames(meta.path, stride=det["stride"], max_width=max_w):
+    if det.get("decoder") == "pyav_ref":
+        frames = iter_frames_fast(meta.path, max_width=det["max_width"])
+    else:
+        frames = iter_frames(meta.path, stride=det["stride"], max_width=det["max_width"])
+    for fi, t, frame, s in frames:
         if need_signals:
             sig_t.append(t)
             for k, sc in scene.signals.items():
-                sig_s[k].append(signal_state(frame, sc))
+                # signal ROIs are in full-resolution pixels; the frame may be downscaled by s
+                sig_s[k].append(signal_state(frame, {kk: (np.asarray(vv) * s).round().astype(int) for kk, vv in sc.items()}))
         if need_tracks:
-            if max_w is None and det["max_width"] and frame.shape[1] > det["max_width"]:
-                from .video import resize_to_width
-                frame, s = resize_to_width(frame, det["max_width"])
             batch.append((fi, t, frame, s))
             if len(batch) >= det["batch"]:
                 flush()

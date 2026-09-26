@@ -8,3 +8,4 @@ pandas>=2.0
 matplotlib>=3.7
 lap>=0.5.12
 pyyaml>=6.0
+av>=12.0

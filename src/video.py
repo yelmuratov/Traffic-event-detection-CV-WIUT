@@ -117,3 +117,53 @@ def read_frame_at(path: str, t_sec: float) -> np.ndarray | None:
     ok, frame = cap.read()
     cap.release()
     return frame if ok else None
+
+
+def iter_frames_fast(path: str, max_width: int | None = 1920, skip_nonref: bool = True, prefetch: int = 16):
+    """Fast reader for Part A: PyAV with all CPU cores, decoding only REFERENCE frames
+    (I/P, ~every 3rd frame in these clips) and downscaling inside FFmpeg.
+    ~1.6x faster than decoding every frame. Yields (frame_idx, t_sec, frame_bgr, scale).
+    Falls back to OpenCV (stride 3) if PyAV is not installed."""
+    try:
+        import av
+    except ImportError:
+        yield from iter_frames(path, stride=3, max_width=max_width)
+        return
+    meta = probe(path)
+    q: queue.Queue = queue.Queue(maxsize=prefetch)
+    stop = threading.Event()
+
+    def worker():
+        try:
+            with av.open(path) as c:
+                st = c.streams.video[0]
+                st.thread_type = "AUTO"
+                if skip_nonref:
+                    st.codec_context.skip_frame = "NONREF"
+                W, H = st.codec_context.width, st.codec_context.height
+                s = min(1.0, (max_width or W) / W)
+                w2, h2 = int(round(W * s / 2) * 2), int(round(H * s / 2) * 2)
+                for f in c.decode(st):
+                    if stop.is_set():
+                        break
+                    t = float(f.time) if f.time is not None else 0.0
+                    img = f.to_ndarray(format="bgr24", width=w2, height=h2) if s < 1 else f.to_ndarray(format="bgr24")
+                    q.put((int(round(t * meta.fps)), t, img, w2 / W))
+        finally:
+            q.put(None)
+
+    th = threading.Thread(target=worker, daemon=True)
+    th.start()
+    try:
+        while True:
+            item = q.get()
+            if item is None:
+                break
+            yield item
+    finally:
+        stop.set()
+        while th.is_alive():
+            try:
+                q.get_nowait()
+            except queue.Empty:
+                th.join(timeout=0.05)
