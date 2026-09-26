@@ -21,7 +21,7 @@ import numpy as np  # noqa: E402
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from solution import CLASSES  # noqa: E402
 from src.pipeline import analyse  # noqa: E402
-from src.video import iter_frames, probe  # noqa: E402
+from src.video import iter_frames, iter_frames_fast, probe  # noqa: E402
 
 CLS_NAMES = {0: "person", 1: "bicycle", 2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
 CLS_COL = {0: (0, 200, 255), 1: (255, 128, 0), 2: (0, 255, 0), 3: (255, 0, 255), 5: (255, 255, 0), 7: (0, 128, 255)}
@@ -51,7 +51,9 @@ def timeline_png(events, duration, out, risk=None, gt=None, title=""):
     fig.tight_layout(); fig.savefig(out, dpi=110); plt.close(fig)
 
 
-def render(video, out_dir, events=None, risk=None, gt=None, width=1280, draw_scene=True):
+def render(video, out_dir, events=None, risk=None, gt=None, width=1280, draw_scene=True, out_fps=None):
+    """out_fps=None: every frame at the source rate. out_fps=10: decode only reference frames
+    (~3x faster on CPU) and write a steady 10 fps video; boxes line up exactly with tracked frames."""
     os.makedirs(out_dir, exist_ok=True)
     meta, ctx = analyse(video)
     if events is None:
@@ -66,12 +68,19 @@ def render(video, out_dir, events=None, risk=None, gt=None, width=1280, draw_sce
     s = width / meta.width
     H = int(round(meta.height * s / 2) * 2)
     tmp = os.path.join(out_dir, f"{stem}_tmp.mp4")
-    wr = cv2.VideoWriter(tmp, cv2.VideoWriter_fourcc(*"mp4v"), meta.fps, (width, H))
+    fps_out = out_fps or meta.fps
+    wr = cv2.VideoWriter(tmp, cv2.VideoWriter_fourcc(*"mp4v"), fps_out, (width, H))
     scene_layer = None
-    for fi, t, frame, _ in iter_frames(video, stride=1):
-        img = cv2.resize(frame, (width, H), interpolation=cv2.INTER_AREA)
+    frames = iter_frames_fast(video, max_width=width) if out_fps else iter_frames(video, stride=1)
+    n_out = 0
+    for fi, t, frame, _ in frames:
+        if out_fps and t < n_out / fps_out - 1e-6:
+            continue                          # keep the output clock steady
+        img = frame if frame.shape[1] == width else cv2.resize(frame, (width, H), interpolation=cv2.INTER_AREA)
+        img = np.ascontiguousarray(img[:H])
         if draw_scene and scene_layer is None:
-            scene_layer = cv2.resize(ctx.scene.draw(np.zeros_like(frame), alpha=1.0), (width, H))
+            full = np.zeros((meta.height, meta.width, 3), np.uint8)   # scene map is in source pixels
+            scene_layer = cv2.resize(ctx.scene.draw(full, alpha=1.0), (width, H), interpolation=cv2.INTER_NEAREST)
         if draw_scene:
             mask = scene_layer.any(2)
             img[mask] = (0.75 * img[mask] + 0.25 * scene_layer[mask]).astype(np.uint8)
@@ -98,11 +107,16 @@ def render(video, out_dir, events=None, risk=None, gt=None, width=1280, draw_sce
             cv2.rectangle(img, (width - 170, 45), (width - 170 + int(150 * rv), 65),
                           (0, 0, 255) if rv >= 0.5 else (0, 200, 255), -1)
             cv2.putText(img, f"risk {rv:.2f}", (width - 170, 85), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1)
-        wr.write(img)
+        reps = 1
+        if out_fps:                           # repeat a frame if the decoder skipped ahead
+            reps = max(1, int((t + 1e-6) * fps_out) - n_out + 1)
+        for _ in range(reps):
+            wr.write(img)
+        n_out += reps
     wr.release()
     out = os.path.join(out_dir, f"{stem}_annotated.mp4")
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", tmp, "-c:v", "libx264", "-preset", "veryfast",
-                    "-crf", "28", "-pix_fmt", "yuv420p", "-movflags", "+faststart", out], check=True)
+                    "-crf", "30", "-pix_fmt", "yuv420p", "-movflags", "+faststart", out], check=True)
     os.remove(tmp)
     timeline_png(events, meta.duration, os.path.join(out_dir, f"{stem}_timeline.png"), risk, gt, meta.name)
     json.dump({"video": meta.name, "duration": meta.duration, "events": events,
@@ -115,6 +129,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("video"); ap.add_argument("out")
     ap.add_argument("--pred"); ap.add_argument("--gt"); ap.add_argument("--width", type=int, default=1280)
+    ap.add_argument("--fps", type=float, default=None, help="e.g. 10: fast render from reference frames only")
     a = ap.parse_args()
     name = os.path.basename(a.video)
     ev = risk = gt = None
@@ -123,4 +138,4 @@ if __name__ == "__main__":
         ev, risk = v.get("events"), v.get("risk")
     if a.gt:
         gt = json.load(open(a.gt)).get(name, {}).get("events")
-    print(render(a.video, a.out, ev, risk, gt, a.width))
+    print(render(a.video, a.out, ev, risk, gt, a.width, out_fps=a.fps))
