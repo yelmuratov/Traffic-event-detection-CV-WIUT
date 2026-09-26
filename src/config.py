@@ -104,13 +104,14 @@ ENABLED = {
 }
 
 RULES = {
-    "stopped_vehicle": {"min_s": 10.0, "merge_gap_s": 3.0, "min_neighbors_moving": 1},
-    "congestion": {"min_vehicles": 4, "max_median_speed": 0.3, "min_s": 75.0, "smooth_s": 3.0},  # longer than a red phase
+    "stopped_vehicle": {"min_s": 10.0, "merge_gap_s": 3.0, "max_others": 2},
+    "congestion": {"min_stopped": 4, "stat_speed": 0.3, "min_s": 12.0, "smooth_s": 8.0},  # stopped cars inside the junction box
     "wrong_way": {"cos": -0.5, "min_s": 1.5, "min_speed": 0.5, "flow_min_count": 20, "flow_min_coherence": 0.7},
-    "red_light": {"red_before_s": 0.3, "max_s": 8.0, "min_speed": 0.8},
-    "stop_line": {"max_after_stop_s": 90.0},
-    "jaywalking": {"min_s": 2.0, "crosswalk_buffer_px": 60, "rider_overlap": 0.3, "min_speed": 0.3},
-    "failure_to_yield": {"ped_buffer_px": 20, "min_vehicle_speed": 0.8, "near_w": 1.5, "ped_min_speed": 0.3},
+    "red_light": {"red_before_s": 5.0, "max_s": 3.0, "min_speed": 0.8},
+    "stop_line": {"max_after_stop_s": 90.0, "red_before_s": 0.3},
+    "jaywalking": {"min_s": 2.0, "crosswalk_buffer_px": 150, "rider_overlap": 0.3, "min_speed": 0.3,
+                   "min_conf": 0.6, "min_path_h": 0.0},
+    "failure_to_yield": {"ped_buffer_px": 20, "min_vehicle_speed": 0.8, "near_w": 1.5, "ped_min_speed": 0.5},
     "solid_line": {"min_cross_px": 5, "min_cross_w": 0.3, "max_s": 4.0, "persist_s": 1.0, "min_speed": 0.8},
     "turn": {"turn_deg": 60, "u_turn_deg": 150, "window_s": 12.0, "onset_deg": 10},
     "near_miss": {"ttc_s": 0.7, "decel_frac": 0.5, "swerve_deg": 25, "react_s": 1.5, "min_speed": 1.2},
@@ -127,11 +128,11 @@ POST_DEFAULT = {"merge_gap": 1.0, "min_len": 0.5, "start_shift": 0.0, "end_shift
 POST = {
     "accident": {"merge_gap": 2.0, "min_len": 1.0},
     "stopped_vehicle": {"merge_gap": 3.0, "min_len": 10.0},
-    "congestion": {"merge_gap": 5.0, "min_len": 15.0},
-    "jaywalking": {"merge_gap": 1.5, "min_len": 1.0},
+    "congestion": {"merge_gap": 5.0, "min_len": 10.0},
+    "jaywalking": {"merge_gap": 4.0, "min_len": 1.0},
     "wrong_way": {"merge_gap": 1.5, "min_len": 1.5},
     "red_light": {"merge_gap": 0.3, "min_len": 0.5},
-    "failure_to_yield": {"merge_gap": 0.3, "min_len": 0.5},
+    "failure_to_yield": {"merge_gap": 4.0, "min_len": 1.5},
 }
 
 

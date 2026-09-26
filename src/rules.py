@@ -86,14 +86,29 @@ def _side(p: np.ndarray, a: np.ndarray, b: np.ndarray) -> np.ndarray:
 
 
 # ============================================================ stopped_vehicle
+def _in_box(ctx: Ctx, x, y) -> np.ndarray:
+    """Inside the junction box: on the road, outside the drawn approach lanes and queue zones."""
+    m = ctx.scene.on_road(x, y)
+    if ctx.scene.queue_zones:
+        m &= ~ctx.scene.in_queue_zone(x, y)
+    if ctx.scene.lanes:
+        m &= ~ctx.scene.lane_direction(x, y)[1]
+    return m
+
+
 def rule_stopped_vehicle(ctx: Ctx):
+    """A vehicle standing still inside the junction for >= min_s while it is not part of a jam.
+    Parked cars / bus stops along the approach road are not events (they are outside the box)."""
     c = R["stopped_vehicle"]
     cands = []
     v = ctx.vehicles
-    for tid, g in v.groupby("tid"):
-        m = (g["speed_n"].to_numpy() < STAT) & ctx.scene.on_road(g["gx"].to_numpy(), g["gy"].to_numpy())
-        if ctx.scene.queue_zones:
-            m &= ~ctx.scene.in_queue_zone(g["gx"].to_numpy(), g["gy"].to_numpy())
+    if v.empty:
+        return []
+    box = _in_box(ctx, v["gx"].to_numpy(), v["gy"].to_numpy())
+    stat_all = v[box & (v["speed_n"].to_numpy() < STAT)]
+    n_stat = stat_all.groupby("t").size()
+    for tid, g in v[box].groupby("tid"):
+        m = g["speed_n"].to_numpy() < STAT
         for a, b in runs(m, g["t"].to_numpy(), max_gap=1.0):
             seg = g[(g["t"] >= a) & (g["t"] <= b)]
             cands.append([a, b, seg["gx"].median(), seg["gy"].median(), seg["h"].median(), tid])
@@ -111,8 +126,9 @@ def rule_stopped_vehicle(ctx: Ctx):
     for a, b, x, y, h, tid in merged:
         if b - a < c["min_s"]:
             continue
-        if not ctx.scene.queue_zones and _is_queue(ctx, a, b, x, y, h):
-            continue
+        others = n_stat[(n_stat.index >= a) & (n_stat.index <= b)]
+        if len(others) and np.median(others) - 1 >= c["max_others"]:
+            continue  # many cars standing in the box = a jam (congestion), not one stopped vehicle
         out.append((a, b, "stopped_vehicle"))
     return out
 
@@ -128,25 +144,18 @@ def _is_queue(ctx: Ctx, a, b, x, y, h) -> bool:
 
 # ============================================================ congestion
 def rule_congestion(ctx: Ctx):
+    """Gridlock: at least `min_stopped` vehicles standing still inside the junction box
+    (approach queues at a red light are normal and do not count)."""
     c = R["congestion"]
     v = ctx.vehicles
     if v.empty:
         return []
-    keep = ctx.scene.on_road(v["gx"].to_numpy(), v["gy"].to_numpy())
-    if ctx.scene.queue_zones:
-        keep &= ~ctx.scene.in_queue_zone(v["gx"].to_numpy(), v["gy"].to_numpy())
-    v = v[keep].copy()
-    v["group"] = ctx.scene.lane_group(v["gx"].to_numpy(), v["gy"].to_numpy())
-    out = []
+    v = v[_in_box(ctx, v["gx"].to_numpy(), v["gy"].to_numpy())]
     all_t = np.sort(ctx.df["t"].unique())
-    for grp, g in v.groupby("group"):
-        agg = g.groupby("t").agg(n=("tid", "size"), med=("speed_n", "median")).reindex(all_t)
-        flag = ((agg["n"] >= c["min_vehicles"]) & (agg["med"] <= c["max_median_speed"])).astype(float)
-        w = max(1, int(c["smooth_s"] * ctx.fps / config.DETECTOR["stride"]))
-        flag = flag.rolling(w, center=True, min_periods=1).mean() > 0.5
-        for a, b in runs(flag.to_numpy(), all_t, max_gap=2.0, min_len=c["min_s"]):
-            out.append((a, b, "congestion"))
-    return out
+    n_stat = (v["speed_n"] < c["stat_speed"]).groupby(v["t"]).sum().reindex(all_t).fillna(0)
+    w = max(1, int(round(c["smooth_s"] * ctx.fps / config.DETECTOR["stride"])))
+    flag = (n_stat >= c["min_stopped"]).astype(float).rolling(w, center=True, min_periods=1).mean() > 0.5
+    return [(a, b, "congestion") for a, b in runs(flag.to_numpy(), all_t, max_gap=3.0, min_len=c["min_s"])]
 
 
 # ============================================================ wrong_way
@@ -188,8 +197,10 @@ def rule_signals(ctx: Ctx):
                 continue
             i = idx[0]
             tc = t[i] + (t[i + 1] - t[i]) * (-side[i]) / max(side[i + 1] - side[i], 1e-6)
-            if not (sig(tc)[0] == 1 and sig(tc - R["red_light"]["red_before_s"])[0] == 1):
+            if not (sig(tc)[0] == 1 and sig(tc - R["stop_line"]["red_before_s"])[0] == 1):
                 continue
+            # running the light only counts once red is well established (not the amber/clearing seconds)
+            red_long = sig(tc - R["red_light"]["red_before_s"])[0] == 1
             if g["speed_n"].to_numpy()[max(0, i - 2): i + 3].max() < R["red_light"]["min_speed"] and \
                     _first_stationary_after(g.iloc[i + 1:], tc) is None:
                 continue  # jitter of a waiting car around the line, not a real crossing
@@ -201,6 +212,8 @@ def rule_signals(ctx: Ctx):
             t_enter = after["t"].to_numpy()[inside][0] if inside.any() else None
             t_stop = _first_stationary_after(after, tc)
             if t_enter is not None and (t_stop is None or t_enter <= t_stop):
+                if not red_long:
+                    continue
                 inside_t = after["t"].to_numpy()[inside]
                 end = min(inside_t[-1] if len(inside_t) else t[-1], tc + R["red_light"]["max_s"])
                 out.append((tc, max(end, tc + 0.5), "red_light"))
@@ -226,6 +239,11 @@ def rule_jaywalking(ctx: Ctx):
             sel = (t >= a) & (t <= b)
             if np.median(g["speed_n"].to_numpy()[sel]) < c["min_speed"]:
                 continue  # standing still (waiting at the curb, street vendor, detector noise)
+            if g["conf"].to_numpy()[sel].mean() < c.get("min_conf", 0.0):
+                continue  # weak detections (poles, shadows, far-away blobs)
+            h = np.median(g["h"].to_numpy()[sel])
+            if np.hypot(np.ptp(x[sel]), np.ptp(y[sel])) < c.get("min_path_h", 0.0) * h:
+                continue  # hardly moved across the road
             out.append((a, b, "jaywalking"))
     return out
 
