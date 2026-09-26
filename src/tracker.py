@@ -94,7 +94,8 @@ def analyse_video(meta: VideoMeta, scene=None, want_tracks: bool = True, progres
     det = config.DETECTOR
     signals_cfg = {k: {kk: list(map(int, vv)) for kk, vv in v.items()} for k, v in (scene.signals if scene else {}).items()}
     vkey = video_key(meta.path)
-    tr_cfg = {"det": det, "trk": config.TRACKER, "classes": config.DET_CLASSES, "thumbs": config.THUMBS}
+    det_key = {k: v for k, v in det.items() if not (k == "det_every" and v == 1)}  # default keeps old cache keys
+    tr_cfg = {"det": det_key, "trk": config.TRACKER, "classes": config.DET_CLASSES, "thumbs": config.THUMBS}
     tr_cache = _cache_path("tracks", vkey, tr_cfg)
     sg_cache = _cache_path("signals", vkey, {"sig": signals_cfg, "stride": det["stride"],
                                              "decoder": det.get("decoder"), "w": det["max_width"]})

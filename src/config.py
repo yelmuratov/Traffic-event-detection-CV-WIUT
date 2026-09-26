@@ -51,7 +51,7 @@ DETECTOR = {
     "decoder": "pyav_ref",           # PyAV, reference frames only (~every 3rd); faster than OpenCV here
     "stride": 5 if DEMO else 3,      # frame spacing (pyav_ref gives ~3; used by the OpenCV fallback)
     "batch": 1 if DEMO else 8,       # frames per GPU call
-    "max_width": 1280,               # frames are downscaled to this width (= model input size)
+    "max_width": 1920,               # frames are downscaled to this width before the model
     "det_every": 1,                  # run the detector on every n-th decoded frame
 }
 THUMBS = {"every_s": 2.0, "width": 640, "height": 360}   # grey background samples (road_obstacle)
