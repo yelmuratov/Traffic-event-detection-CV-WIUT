@@ -127,13 +127,16 @@ RULES = {
 # Segment post-processing per class: merge gaps, minimum length, boundary shifts
 POST_DEFAULT = {"merge_gap": 1.0, "min_len": 0.5, "start_shift": 0.0, "end_shift": 0.0, "max_len": None}
 POST = {
+    # start/end shifts tuned on our dev labels (annotators mark events ~1 s before the rule fires)
     "accident": {"merge_gap": 2.0, "min_len": 1.0},
-    "stopped_vehicle": {"merge_gap": 3.0, "min_len": 10.0},
+    "stopped_vehicle": {"merge_gap": 3.0, "min_len": 10.0, "start_shift": -1.0, "end_shift": 1.5},
     "congestion": {"merge_gap": 5.0, "min_len": 10.0},
-    "jaywalking": {"merge_gap": 4.0, "min_len": 1.0},
+    "jaywalking": {"merge_gap": 1.5, "min_len": 1.0, "start_shift": -1.5, "end_shift": 0.5},
     "wrong_way": {"merge_gap": 1.5, "min_len": 1.5},
     "red_light": {"merge_gap": 0.3, "min_len": 0.5},
-    "failure_to_yield": {"merge_gap": 4.0, "min_len": 1.5},
+    "failure_to_yield": {"merge_gap": 1.5, "min_len": 1.5, "start_shift": -1.5, "end_shift": -1.0},
+    "illegal_turn": {"start_shift": -1.5, "end_shift": -1.0},
+    "solid_line_crossing": {"merge_gap": 0.5, "start_shift": -0.5, "end_shift": -0.5},
 }
 
 

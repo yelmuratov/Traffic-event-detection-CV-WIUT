@@ -105,7 +105,7 @@ def test_congestion():
 def test_postprocess_valid():
     raw = [(1, 3, "jaywalking"), (3.5, 5, "jaywalking"), (2, 2.2, "wrong_way"), (4, 9, "accident"), (5, 6, "near_miss")]
     ev = postprocess(raw, 8.0)
-    assert ev == [[1.0, 5.0, "jaywalking"], [4.0, 8.0, "accident"]]
+    assert ev == [[0.0, 5.5, "jaywalking"], [4.0, 8.0, "accident"]]   # merged, shifted -1.5/+0.5 s, clipped at 0
 
 
 def test_solid_line_ignores_drift_along_line():
