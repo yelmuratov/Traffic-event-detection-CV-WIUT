@@ -281,6 +281,9 @@ def rule_failure_to_yield(ctx: Ctx):
 
 # ============================================================ solid_line_crossing
 def rule_solid_line(ctx: Ctx):
+    """Lane change over a solid lane line (drawn from where the paint becomes solid up to the stop
+    line). The ground point must be clearly on one side for `persist_s` before and on the other side
+    for `persist_s` after the crossing; the event is the crossing +- half_s."""
     c = R["solid_line"]
     out = []
     for line in ctx.scene.solid_lines:
@@ -294,10 +297,9 @@ def rule_solid_line(ctx: Ctx):
             for tid, g in ctx.vehicles.groupby("tid"):
                 p = g[["gx", "gy"]].to_numpy()
                 u = ((p - a) @ d) / L ** 2
-                dist = (p - a) @ nrm
-                ext = 0.5 * (g["w"].to_numpy() * abs(nrm[0]) + 0.3 * g["h"].to_numpy() * abs(nrm[1]))
+                dist = pd.Series((p - a) @ nrm).rolling(5, center=True, min_periods=1).median().to_numpy()
                 t = g["t"].to_numpy()
-                ok = (u > 0) & (u < 1)
+                ok = (u > -0.02) & (u < 1.02)
                 sgn = np.where(dist >= 0, 1, -1)
                 idx = np.flatnonzero((sgn[:-1] * sgn[1:] < 0) & ok[:-1] & ok[1:])
                 spd = g["speed_n"].to_numpy()
@@ -308,23 +310,15 @@ def rule_solid_line(ctx: Ctx):
                     win_a = (t >= t[i + 1]) & (t < t[i + 1] + pw)
                     if win_b.sum() < 3 or win_a.sum() < 3:
                         continue
-                    # clearly on the old side before and on the new side after (not jitter along the line)
                     if (sgn[win_b] == sgn[i]).mean() < 0.9 or (sgn[win_a] == sgn[i + 1]).mean() < 0.9:
-                        continue
-                    if np.abs(dist[win_a]).max() < max(c["min_cross_px"], c["min_cross_w"] * w_[i]):
+                        continue  # jitter along the line, not a lane change
+                    lat = max(c["min_cross_px"], c["min_cross_w"] * w_[i])
+                    if np.abs(dist[win_a]).max() < lat or np.abs(dist[win_b]).max() < lat:
                         continue
                     if np.median(spd[win_b | win_a]) < c["min_speed"]:
                         continue  # queued / creeping cars drifting over the paint
-                    touch = np.abs(dist) <= ext
-                    s = i
-                    while s > 0 and touch[s - 1] and t[i] - t[s - 1] < c["max_s"]:
-                        s -= 1
-                    e = i + 1
-                    while e < len(t) - 1 and touch[e] and t[e] - t[i] < c["max_s"]:
-                        e += 1
-                    if t[e] - t[s] > c["max_s"]:
-                        continue  # a real lane change takes a few seconds, not a long drift
-                    out.append((t[s], max(t[e], t[s] + 0.5), "solid_line_crossing"))
+                    tc = 0.5 * (t[i] + t[i + 1])
+                    out.append((tc - c["half_s"], tc + c["half_s"], "solid_line_crossing"))
     return out
 
 
@@ -371,6 +365,8 @@ def rule_turns(ctx: Ctx):
                 t_from = t[before].max()                         # last time in the entry zone
                 ext = _turn_extent(g[(g["t"] >= t_from - 2) & (g["t"] <= t_to + 2)], 30, c["window_s"])
                 a, b = (ext[1], ext[2]) if ext else (t_from, t_to)
+                if b - a > c["max_turn_s"]:
+                    a, b = t_to - c["max_turn_s"], t_to        # the manoeuvre itself, not the wait before it
                 out.append((a, max(b, a + 0.5), mv["label"]))
         # 2) U-turns anywhere inside a no-U-turn zone
         if ctx.scene.no_u_turn:
