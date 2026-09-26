@@ -146,22 +146,38 @@ def analyse_video(meta: VideoMeta, scene=None, want_tracks: bool = True, progres
     else:
         frames = iter_frames(meta.path, stride=det["stride"], max_width=det["max_width"])
     det_every = max(1, int(det.get("det_every", 1)))
-    for n_dec, (fi, t, frame, s) in enumerate(frames):
+    prof = {"decode": 0.0, "model": 0.0, "signals": 0.0, "thumbs": 0.0}
+    frames = iter(frames)
+    n_dec = -1
+    while True:
+        tq = time.perf_counter()
+        item = next(frames, None)
+        prof["decode"] += time.perf_counter() - tq          # time spent waiting for the decoder
+        if item is None:
+            break
+        fi, t, frame, s = item
+        n_dec += 1
+        tq = time.perf_counter()
         if need_signals:
             sig_t.append(t)
             for k, sc in scene.signals.items():
                 # signal ROIs are in full-resolution pixels; the frame may be downscaled by s
                 sig_s[k].append(signal_state(frame, {kk: (np.asarray(vv) * s).round().astype(int) for kk, vv in sc.items()}))
+        prof["signals"] += time.perf_counter() - tq
         if need_tracks:
+            tq = time.perf_counter()
             if not thumb_t or t - thumb_t[-1] >= config.THUMBS["every_s"]:
                 # small grey background samples for the road-obstacle detector
                 thumb_t.append(t)
                 thumb_img.append(cv2.cvtColor(cv2.resize(frame, (tw, th_), interpolation=cv2.INTER_AREA),
                                               cv2.COLOR_BGR2GRAY))
+            prof["thumbs"] += time.perf_counter() - tq
             if n_dec % det_every == 0:          # detector on every det_every-th decoded frame
                 batch.append((fi, t, frame, s))
                 if len(batch) >= det["batch"]:
+                    tq = time.perf_counter()
                     flush()
+                    prof["model"] += time.perf_counter() - tq
         if progress and fi % (det["stride"] * 500) == 0:
             log.info("%s  t=%.0fs  %.1f fps", meta.name, t, (fi + 1) / max(time.time() - t0, 1e-6))
     if need_tracks:
@@ -174,8 +190,9 @@ def analyse_video(meta: VideoMeta, scene=None, want_tracks: bool = True, progres
         signals = {k: (np.asarray(sig_t, np.float32), np.asarray(v, np.int8)) for k, v in sig_s.items()}
         if sg_cache:
             np.savez_compressed(sg_cache, signals=np.array(signals, dtype=object))
-    log.info("%s analysed in %.1fs (%.2fx realtime)", meta.name, time.time() - t0,
-             (time.time() - t0) / max(meta.duration, 1e-6))
+    log.info("%s analysed in %.1fs (%.2fx realtime); %d frames; time split: %s", meta.name, time.time() - t0,
+             (time.time() - t0) / max(meta.duration, 1e-6), n_dec + 1,
+             ", ".join(f"{k} {v:.0f}s" for k, v in prof.items()))
     if tracks is None:
         tracks = np.zeros((0, len(TRACK_COLS)), np.float32)
     return tracks, _with_thumbs(signals, thumbs)

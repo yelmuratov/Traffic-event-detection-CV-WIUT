@@ -48,7 +48,7 @@ DETECTOR = {
     "imgsz": 640 if DEMO else 1280,
     "conf": 0.25,
     "iou": 0.6,
-    "decoder": "opencv",             # sequential OpenCV read, grab() on skipped frames (fastest in the harness process)
+    "decoder": "pyav_ref",           # PyAV, reference frames only (~every 3rd); faster than OpenCV here
     "stride": 5 if DEMO else 3,      # frame spacing (pyav_ref gives ~3; used by the OpenCV fallback)
     "batch": 1 if DEMO else 8,       # frames per GPU call
     "max_width": 1280,               # frames are downscaled to this width (= model input size)
