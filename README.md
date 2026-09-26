@@ -80,9 +80,9 @@ All thresholds live in `src/config.py`.
 2. It fits short-window velocities for every track.
 3. For every pair of road users it computes the time to closest approach and the miss distance:
    `risk_pair = exp(−TTC/1.5 s) · exp(−miss² / 2σ²)`
-4. The three riskiest pairs are combined, plus a bonus for hard braking, then smoothed with an EMA.
+4. The riskiest pair, plus a bonus for hard braking, is smoothed with an EMA.
 
-A time guard (`src/budget.py`) watches the shared 3× time budget. If the projected finish gets close to the limit, it lowers the detection rate. Our samples contain no accidents, so Part B could not be calibrated (see Limitations).
+The level is mapped through a sigmoid centred on the 99.5th percentile of normal traffic in the samples, so 0.5 is crossed only by the rarest conflicts (monotonic, so ranking is unchanged). Car-following in a lane and driving past a standing car count as normal traffic. A time guard (`src/budget.py`) watches the shared 3× time budget. If the projected finish gets close to the limit, it lowers the detection rate. Our samples contain no accidents, so it is calibrated against normal traffic only (see Limitations).
 
 ## Results on the sample videos (dev set, our labels)
 
@@ -146,14 +146,15 @@ scene/                 scene map + reference frame it was drawn on
 labels/labels.txt      our dev labels of the sample videos
 tools/                 labels, EDA, rendering, profiling, synthetic test clips, Colab helpers (dev only)
 tests/                 rule unit tests on synthetic tracks  (python -m pytest tests -q)
-demo/app.py            live demo (CPU)
+demo/app.py            live demo (CPU, Hugging Face Space)
+docs/                  team website (GitHub Pages)
 notebooks/             Colab notebook used for development
 predictions_samples.json   our output on the sample videos
 ```
 
 ## Limitations and what we would do next
 
-- **Part B is uncalibrated.** The samples contain no accidents, so the 0.5 alarm threshold was set by reasoning, not data. Next step: calibrate on public crash datasets (DoTA, CCD).
+- **Part B is only calibrated on normal traffic.** The samples contain no accidents, so we could set how rarely it alarms (about 18 short alarms over 18 min of normal traffic) but not how well it catches real crashes. Next step: calibrate on public crash datasets (DoTA, CCD).
 - **Rare classes are not predicted.** illegal U-turn, near miss and road obstacle had 0–1 examples. A learned clip classifier trained on public data would help.
 - **Some rules are weak.** `solid_line_crossing` and `failure_to_yield` depend on accurate ground points of partially occluded vehicles.
 - **Labels may not match the organisers'.** Our dev labels come from one team and may be interpreted differently from the official annotators.
@@ -164,12 +165,12 @@ predictions_samples.json   our output on the sample videos
 - No external training data. Dev labels were written by us on the provided sample videos.
 - Open-source code: Ultralytics (YOLO, ByteTrack) AGPL-3.0; OpenCV Apache-2.0; PyAV BSD; NumPy/pandas BSD.
 
-## Team
-
-Team details will be added. The roles below describe the work split:
+## Team WannaCry
 
 | Member | Role | What they did | Links |
 |---|---|---|---|
-| _Name_ | _Role_ | _TBD_ | _GitHub / LinkedIn_ |
-| _Name_ | _Role_ | _TBD_ | _GitHub / LinkedIn_ |
-| _Name_ | _Role_ | _TBD_ | _GitHub / LinkedIn_ |
+| Doniyor Yuldashev | _to be confirmed_ | _to be confirmed_ | [LinkedIn](https://www.linkedin.com/in/doniyor-yuldashev/) · [GitHub](https://github.com/DoniyorbekYuldashev) |
+| Salimbay Elmuratov | _to be confirmed_ | _to be confirmed_ | [LinkedIn](https://www.linkedin.com/in/salimbayelmuratov/) · [GitHub](https://github.com/yelmuratov) |
+| Muhammadjon Saidov | _to be confirmed_ | _to be confirmed_ | [LinkedIn](https://www.linkedin.com/in/muhammadjon-saidov-710713206/) · [GitHub](https://github.com/muhammadjonsaidov) |
+
+Website: https://yelmuratov.github.io/Traffic-event-detection-CV-WIUT/ (source in `docs/`) · Live demo: Hugging Face Space (link on the website).

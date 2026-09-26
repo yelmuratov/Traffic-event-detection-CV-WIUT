@@ -21,6 +21,13 @@ C = config.RISK
 _SHARED = {}
 
 
+def calibrate(x: float) -> float:
+    """Map the smoothed conflict level to P(accident within 5 s). Normal traffic in the sample videos
+    (no accidents) stays below `calib_center` 99.5 % of the time, so 0.5 is crossed only by the rarest
+    conflicts. The mapping is monotonic, so the ranking (AP) is unchanged."""
+    return float(1.0 / (1.0 + np.exp(-(x - C["calib_center"]) / C["calib_scale"])))
+
+
 def _model():
     if "m" not in _SHARED:
         _SHARED["m"] = new_model(C["weights"])
@@ -95,7 +102,7 @@ class RiskEngine:
         self._update_hist(res, t_sec, s)
         raw = self._raw_risk(t_sec)
         self.ema = C["ema"] * raw + (1 - C["ema"]) * self.ema
-        self.score = float(np.clip(C["gain"] * self.ema, 0.0, 1.0))
+        self.score = calibrate(self.ema)
         return self.score
 
     # ------------------------------------------------------------------
@@ -143,8 +150,15 @@ class RiskEngine:
         if len(k) < 2:
             return self.brake
         a = np.asarray([r[1:7] for r in k], float)  # x y vx vy w h
+        veh = np.asarray([r[7] in config.VEHICLES for r in k])
+        spd = np.hypot(a[:, 2], a[:, 3]) / a[:, 5]  # box-heights / s
         n = len(a)
         i, j = np.triu_indices(n, 1)
+        keep = (veh[i] | veh[j])                                  # pedestrian groups never crash
+        keep &= np.where(veh[i], spd[i], 0) + np.where(veh[j], spd[j], 0) > C["min_vehicle_speed"]
+        i, j = i[keep], j[keep]
+        if len(i) == 0:
+            return self.brake
         hn = (a[i, 5] + a[j, 5]) / 2
         p = (a[j, :2] - a[i, :2]) / hn[:, None]
         v = (a[j, 2:4] - a[i, 2:4]) / hn[:, None]
@@ -156,9 +170,19 @@ class RiskEngine:
         dmin = np.linalg.norm(p + v * np.clip(tstar, 0, 1e3)[:, None], axis=1)
         rad = 0.5 * (a[i, 4] + a[j, 4]) / 2 / hn
         miss = np.maximum(0.0, dmin - rad)
+        # same-direction pairs (car following in a lane / queue) are normal traffic: they only count
+        # when the closing is violent. Crossing and head-on conflicts count fully.
+        ui = a[i, 2:4] / np.maximum(np.linalg.norm(a[i, 2:4], axis=1, keepdims=True), 1e-6)
+        uj = a[j, 2:4] / np.maximum(np.linalg.norm(a[j, 2:4], axis=1, keepdims=True), 1e-6)
+        both_move = (spd[i] > 0.3) & (spd[j] > 0.3)
+        following = both_move & ((ui * uj).sum(1) > C["follow_cos"])
         ok = (tstar > 0) & (tstar < C["max_ttc_s"]) & (closing > C["min_closing"]) & (dist < 6)
+        ok &= ~following | ((closing > C["follow_closing"]) & (tstar < C["follow_ttc_s"]))
+        # moving past something that stands still (queued / parked car, waiting pedestrian) is normal:
+        # count it only when the mover is heading straight at it
+        one_static = (spd[i] < 0.3) ^ (spd[j] < 0.3)
+        aim = closing / np.maximum(np.linalg.norm(v, axis=1), 1e-6)    # 1 = straight at the other
+        ok &= ~one_static | ((aim > C["aim_cos"]) & (closing > C["follow_closing"]))
         ts_ = np.clip(tstar, 0.0, C["max_ttc_s"])        # clipped: no overflow on receding pairs
         pr = np.where(ok, np.exp(-ts_ / C["tau_s"]) * np.exp(-(np.minimum(miss, 10.0) ** 2) / (2 * C["sigma"] ** 2)), 0.0)
-        top = np.sort(pr)[-3:]
-        pair = 1.0 - np.prod(1.0 - top)
-        return float(min(1.0, pair + self.brake))
+        return float(min(1.0, pr.max() + self.brake))  # the single most dangerous pair

@@ -1,4 +1,4 @@
-"""Live demo (P3): upload an .mp4 (<= 2 min) -> events table, timeline, risk curve, annotated video.
+"""Live demo (P3): upload an .mp4 (<= 1 min) -> events table, timeline, risk curve, annotated video.
 
 Runs on CPU (Hugging Face Spaces free tier) with WIUT_DEMO=1 (small model, bigger stride).
   WIUT_DEMO=1 python demo/app.py
@@ -8,6 +8,8 @@ import sys
 import tempfile
 
 os.environ.setdefault("WIUT_DEMO", "1")
+os.environ.setdefault("YOLO_OFFLINE", "0")                       # the Space may download weights once
+os.environ.setdefault("WIUT_CACHE", os.path.join(tempfile.gettempdir(), "wiut_cache"))  # render reuses tracks
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import gradio as gr  # noqa: E402
@@ -17,7 +19,7 @@ from solution import RiskEstimator, detect_events  # noqa: E402
 from src.video import iter_frames, probe  # noqa: E402
 from tools.render import render  # noqa: E402
 
-MAX_S, MAX_MB = 130, 300
+MAX_S, MAX_MB = 65, 300
 
 
 def run(video, progress=gr.Progress()):
@@ -25,7 +27,7 @@ def run(video, progress=gr.Progress()):
         raise gr.Error("Upload an .mp4 first")
     meta = probe(video)
     if meta.duration > MAX_S or os.path.getsize(video) > MAX_MB * 2**20:
-        raise gr.Error(f"Please upload at most {MAX_S // 60} min / {MAX_MB} MB")
+        raise gr.Error(f"Please upload a clip of at most 1 minute and {MAX_MB} MB")
     progress(0.05, desc="Part A: detecting and tracking")
     events = detect_events(video)
     progress(0.45, desc="Part B: causal risk curve")
@@ -39,15 +41,17 @@ def run(video, progress=gr.Progress()):
             progress(0.45 + 0.3 * fi / max(meta.n_frames, 1), desc=f"Part B: {t:.0f}s")
     progress(0.8, desc="Rendering annotated video")
     out_dir = tempfile.mkdtemp()
-    mp4 = render(video, out_dir, events, risk, width=960)
+    mp4 = render(video, out_dir, events, risk, width=960, out_fps=10)
     stem = os.path.splitext(meta.name)[0]
     table = pd.DataFrame(events, columns=["start_s", "end_s", "label"])
     return table, os.path.join(out_dir, f"{stem}_timeline.png"), mp4
 
 
-with gr.Blocks(title="Traffic event detection") as demo:
-    gr.Markdown("## Traffic event detection demo\nUpload a clip from the camera (≤ 2 min, ≤ 300 MB). "
-                "CPU inference, roughly 1–3× the clip length.")
+with gr.Blocks(title="WannaCry demo") as demo:
+    gr.Markdown("## WannaCry · traffic event detection\n"
+                "Upload an **.mp4 from the WIUT hackathon camera** (up to **1 minute**, 300 MB). "
+                "The scene map is drawn for this junction, so other cameras will not give meaningful events. "
+                "Runs on a free CPU with YOLO11n: expect 2–4 minutes; the progress bar shows each stage.")
     inp = gr.Video(label="Input .mp4", sources=["upload"])
     btn = gr.Button("Detect events", variant="primary")
     with gr.Row():

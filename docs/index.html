@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>WannaCry Junction Watch</title>
+<meta name="description" content="Team WannaCry — WIUT Hackathon 2026, Computer Vision Track: traffic event detection and accident anticipation from a fixed CCTV camera.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <a class="brand" href="#top" aria-label="WannaCry — back to top">
+    <span class="lamp" aria-hidden="true"><i></i><i></i><i></i></span>
+    <span>WannaCry</span>
+  </a>
+  <nav class="nav" aria-label="Sections">
+    <a href="#team">Team</a><a href="#approach">Approach</a><a href="#eda">EDA</a>
+    <a href="#results">Results</a><a href="#demo">Live demo</a><a href="#report">Report</a><a href="#links">Links</a>
+  </nav>
+  <button class="theme" id="themeBtn" type="button" aria-label="Switch colour theme">◐</button>
+</header>
+
+<main id="top">
+
+<!-- ============================ HERO -->
+<section class="hero">
+  <div class="plate">
+    <span>WIUT Hackathon 2026</span><span>Computer Vision Track</span><span>Elimination Task</span>
+  </div>
+  <h1>One camera, one junction,<br>every traffic event on a timeline.</h1>
+  <p class="lede">We turn a fixed 4K CCTV view into a list of events, <code>[start, end, label]</code>, across 14 official classes, and raise a causal accident-risk score frame by frame. Pre-trained detection and tracking, a hand-drawn map of the junction, and rules tuned on our own labels.</p>
+  <div class="kpis">
+    <div><b id="kScore">0.346</b><span>Score A on our dev labels<br>(official <code>evaluate.py</code>)</span></div>
+    <div><b>77</b><span>events we labelled in<br>4 sample videos</span></div>
+    <div><b>8</b><span>event classes detected<br>on the samples</span></div>
+    <div><b>18.4<small> min</small></b><span>of 4K video, 29.97 fps,<br>~33 000 frames</span></div>
+  </div>
+  <figure class="hero-fig">
+    <img src="assets/eda/scene_map.jpg" alt="The junction from the camera with our scene map drawn on top: road outline, lanes with driving directions, crosswalks, stop line, solid lane lines and the signal lamp." width="1280" height="720">
+    <figcaption>The scene map we drew once on the camera view: approach lanes and directions (green), crosswalks (blue), stop line (red), solid lane lines (white), queue zones (orange), forbidden turn (magenta), signal lamp (yellow).</figcaption>
+  </figure>
+</section>
+
+<!-- ============================ TEAM -->
+<section id="team">
+  <header class="sec-head"><span class="eyebrow">Team</span><h2>Team WannaCry</h2>
+    <p>Three people, one Colab notebook and a lot of 4K video.</p></header>
+  <div class="team">
+    <article class="member">
+      <img src="assets/team/doniyor.jpg" alt="Doniyor Yuldashev" width="400" height="400" loading="lazy">
+      <div>
+        <h3>Doniyor Yuldashev</h3>
+        <p class="role" data-role="doniyor">Role — to be confirmed</p>
+        <p class="did" data-did="doniyor">Contribution details coming soon.</p>
+        <p class="links"><a href="https://www.linkedin.com/in/doniyor-yuldashev/" target="_blank" rel="noopener">LinkedIn</a><a href="https://github.com/DoniyorbekYuldashev" target="_blank" rel="noopener">GitHub</a></p>
+      </div>
+    </article>
+    <article class="member">
+      <img src="assets/team/salimbay.jpg" alt="Salimbay Elmuratov" width="400" height="400" loading="lazy">
+      <div>
+        <h3>Salimbay Elmuratov</h3>
+        <p class="role" data-role="salimbay">Role — to be confirmed</p>
+        <p class="did" data-did="salimbay">Contribution details coming soon.</p>
+        <p class="links"><a href="https://www.linkedin.com/in/salimbayelmuratov/" target="_blank" rel="noopener">LinkedIn</a><a href="https://github.com/yelmuratov" target="_blank" rel="noopener">GitHub</a></p>
+      </div>
+    </article>
+    <article class="member">
+      <img src="assets/team/muhammadjon.jpg" alt="Muhammadjon Saidov" width="400" height="400" loading="lazy">
+      <div>
+        <h3>Muhammadjon Saidov</h3>
+        <p class="role" data-role="muhammadjon">Role — to be confirmed</p>
+        <p class="did" data-did="muhammadjon">Contribution details coming soon.</p>
+        <p class="links"><a href="https://www.linkedin.com/in/muhammadjon-saidov-710713206/" target="_blank" rel="noopener">LinkedIn</a><a href="https://github.com/muhammadjonsaidov" target="_blank" rel="noopener">GitHub</a></p>
+      </div>
+    </article>
+  </div>
+</section>
+
+<!-- ============================ APPROACH -->
+<section id="approach">
+  <header class="sec-head"><span class="eyebrow">Problem &amp; approach</span><h2>From pixels to a timeline</h2>
+    <p>The camera never moves, so most of the intelligence lives in trajectories and in a map of the junction. Learned models do the seeing; rules do the judging.</p></header>
+
+  <ol class="pipe" aria-label="Pipeline">
+    <li><b>Decode</b><span>PyAV, reference frames only (≈ every 3rd frame), 1920 px</span><em>fast I/O</em></li>
+    <li><b>Detect</b><span>YOLO11m @1280, COCO: person, bicycle, car, motorcycle, bus, truck</span><em class="learned">learned</em></li>
+    <li><b>Track</b><span>ByteTrack IDs, speed in box-heights/s, heading, ground point</span><em>algorithmic</em></li>
+    <li><b>Align</b><span>SIFT + RANSAC homography maps the scene map onto each video</span><em>algorithmic</em></li>
+    <li><b>Judge</b><span>one rule per class on trajectories + scene map + traffic-light state</span><em class="rule">rules</em></li>
+    <li><b>Clean</b><span>merge fragments, shift boundaries, drop blips, validate</span><em class="rule">tuned</em></li>
+  </ol>
+
+  <div class="two">
+    <div>
+      <h3>What is learned, what is written by hand</h3>
+      <table class="tbl">
+        <thead><tr><th>Component</th><th>How</th></tr></thead>
+        <tbody>
+          <tr><td>Object detection</td><td>YOLO11m, COCO pre-trained, open weights, not fine-tuned</td></tr>
+          <tr><td>Tracking</td><td>ByteTrack (Ultralytics)</td></tr>
+          <tr><td>Scene map</td><td>drawn once by us on the reference frame</td></tr>
+          <tr><td>Traffic light</td><td>HSV colour of the red and green lamp regions</td></tr>
+          <tr><td>14 event classes</td><td>rules, thresholds in <code>src/config.py</code></td></tr>
+          <tr><td>Event boundaries</td><td>per-class start/end shifts tuned on our labels</td></tr>
+          <tr><td>Accident risk (Part B)</td><td>time-to-collision physics, calibrated on normal traffic</td></tr>
+        </tbody>
+      </table>
+      <p class="note">No external training data. The only labels are the 77 events we annotated on the sample videos.</p>
+    </div>
+    <div>
+      <h3>Rules at a glance</h3>
+      <dl class="rules">
+        <dt>congestion</dt><dd>≥ 4 vehicles standing still inside the junction box for ≥ 12 s</dd>
+        <dt>stopped vehicle</dt><dd>one vehicle still ≥ 10 s inside the box, not part of a jam</dd>
+        <dt>red light</dt><dd>front crosses the stop line after ≥ 5 s of red</dd>
+        <dt>stop line</dt><dd>stops past the line on red without entering; ends on green</dd>
+        <dt>jaywalking</dt><dd>walking pedestrian on the carriageway away from crosswalks</dd>
+        <dt>failure to yield</dt><dd>car drives through a crosswalk with a walker within 1.5 car widths</dd>
+        <dt>solid line</dt><dd>persistent lane change across the 4 solid lines before the stop line</dd>
+        <dt>illegal turn</dt><dd>turn into the bottom-left road from an inner lane</dd>
+        <dt>wrong way</dt><dd>moving against the drawn lane direction</dd>
+        <dt>accident</dt><dd>two vehicles meet and stay stopped while traffic around keeps moving</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="partb">
+    <h3>Part B: accident anticipation</h3>
+    <p>Six times a second the estimator runs its own detector and tracker on the frames it has seen so far. For every pair involving a moving vehicle it predicts the time to closest approach and the miss distance: <code>risk = exp(−TTC / 1.5 s) · exp(−miss² / 2σ²)</code>. Car-following in a lane and driving past a stopped car are treated as normal traffic. The most dangerous pair plus a hard-braking bonus is smoothed and mapped through a sigmoid centred on the 99.5th percentile of normal traffic, so 0.5 is crossed only by the rarest conflicts. A time guard thins detection if the 3× time budget gets tight.</p>
+  </div>
+</section>
+
+<!-- ============================ EDA -->
+<section id="eda">
+  <header class="sec-head"><span class="eyebrow">Exploratory data analysis</span><h2>What the four sample videos contain</h2>
+    <p>Every number here comes from the tracks our detector produced on the organisers' samples.</p></header>
+
+  <div class="tbl-wrap"><table class="tbl" id="vidTable">
+    <thead><tr><th>Video</th><th>Resolution</th><th>FPS</th><th>Duration</th><th>Frames</th><th>Brightness</th><th>People</th><th>Cars</th><th>Buses</th><th>Trucks</th><th>2-wheelers</th></tr></thead>
+    <tbody></tbody>
+  </table></div>
+
+  <div class="thumbs" id="thumbs"></div>
+
+  <div class="grid2">
+    <figure class="chart"><figcaption>Lighting: mean frame brightness over time</figcaption><div class="cv"><canvas id="cBright"></canvas></div></figure>
+    <figure class="chart"><figcaption>Traffic density: new vehicles per minute</figcaption><div class="cv"><canvas id="cDensity"></canvas></div></figure>
+  </div>
+
+  <figure class="chart wide">
+    <figcaption>Objects visible per frame, by class (5-second bins)
+      <span class="seg" role="group" aria-label="Video" id="countSeg"></span></figcaption>
+    <div class="cv tall"><canvas id="cCounts"></canvas></div>
+  </figure>
+
+  <figure class="chart wide">
+    <figcaption>Traffic-light cycle read from the lamp (red / green), all four videos</figcaption>
+    <div id="signalBars" class="signal"></div>
+    <p class="note">The light runs a steady cycle of about 42–45 s red and 33–35 s green. That rhythm drives the queues, so the congestion and stopped-vehicle rules ignore the approach lanes where cars wait for green.</p>
+  </figure>
+
+  <div class="grid2">
+    <figure class="img"><img src="assets/eda/heat_vehicles.jpg" alt="Heatmap of moving vehicles" loading="lazy" width="1280" height="720"><figcaption>Where vehicles move (ground points of moving vehicles)</figcaption></figure>
+    <figure class="img"><img src="assets/eda/heat_pedestrians.jpg" alt="Heatmap of walking pedestrians" loading="lazy" width="1280" height="720"><figcaption>Where pedestrians walk: the crosswalks and the far sidewalk</figcaption></figure>
+    <figure class="img"><img src="assets/eda/trajectories.jpg" alt="Vehicle trajectories coloured by direction" loading="lazy" width="1280" height="720"><figcaption>Vehicle trajectories in C3897, coloured by overall direction</figcaption></figure>
+    <figure class="img"><img src="assets/eda/flow.jpg" alt="Learned lane directions as arrows" loading="lazy" width="1280" height="720"><figcaption>Lane directions learned from tracks (arrows show the mean motion)</figcaption></figure>
+  </div>
+
+  <div class="findings">
+    <h3>Findings that shaped the solution</h3>
+    <ul>
+      <li><b>Two lighting conditions.</b> C3896 and C3897 are bright midday; C3902 and C3905 are dusk (brightness 65 and 43 against 95). Detection had to work at both, which ruled out colour-threshold tricks for vehicles.</li>
+      <li><b>The view shifts slightly between clips.</b> C3902 is offset by 130 px, C3905 by 75 px at 4K. We align the scene map to every video with a homography instead of redrawing it.</li>
+      <li><b>Queues are normal here.</b> A steady red/green cycle fills the approach every minute. Counting stopped cars naively produced congestion events every cycle, so congestion only counts cars stuck inside the junction box.</li>
+      <li><b>Pedestrians outnumber cars.</b> 350–800 people per clip, many crossing outside the zebra. Jaywalking needs a buffer around crosswalks and ignores low-confidence detections.</li>
+      <li><b>4K decoding dominates runtime.</b> Two thirds of Part A time is spent decoding; we decode only reference frames, which is enough for tracking at ≈ 10 fps.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================ RESULTS -->
+<section id="results">
+  <header class="sec-head"><span class="eyebrow">Results on the sample videos</span><h2>Predictions against our labels</h2>
+    <p>Click an event on the timeline to jump the video there. Top row of each class is our prediction, bottom row is our label.</p></header>
+
+  <div class="player">
+    <div class="seg" role="tablist" aria-label="Sample video" id="vidSeg"></div>
+    <div class="screen">
+      <video id="vid" controls playsinline preload="metadata"></video>
+      <div class="novid" id="novid" hidden>Annotated video is being rendered. The timeline below already works.</div>
+    </div>
+    <div class="tl-wrap"><canvas id="timeline" aria-label="Event timeline: predictions and labels per class"></canvas></div>
+    <div class="tl-legend"><span><i class="sw pred"></i>prediction</span><span><i class="sw gt"></i>our label</span><span><i class="sw risk"></i>risk (Part B formula)</span><span class="now" id="nowLbl">t = 0.0 s</span></div>
+  </div>
+
+  <div class="two">
+    <div>
+      <h3>Per-class score</h3>
+      <div class="tbl-wrap"><table class="tbl" id="scoreTable">
+        <thead><tr><th>Class</th><th>Labels</th><th>Pred.</th><th>F1 @0.3</th><th>@0.5</th><th>@0.7</th><th>Mean</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </div>
+    <div>
+      <h3>How the score moved</h3>
+      <ol class="steps">
+        <li><b>0.12</b><span>first rules, before any tuning</span></li>
+        <li><b>0.27</b><span>junction box for congestion and stopped cars, red must be ≥ 5 s, stricter jaywalking</span></li>
+        <li><b>0.32</b><span>solid lane lines from the vanishing point, illegal-turn zone</span></li>
+        <li><b>0.346</b><span>per-class start/end shifts: rules fired ≈ 1 s after a person marks the start</span></li>
+      </ol>
+      <p class="note">Scores are on the labels we tuned against, so the hidden test set will score lower.</p>
+    </div>
+  </div>
+
+  <h3>One detected example per class</h3>
+  <div class="gallery" id="examples"></div>
+
+  <h3>Where it fails</h3>
+  <p class="note" id="failNote"></p>
+  <div class="gallery" id="failures"></div>
+
+  <figure class="chart wide">
+    <figcaption>Dashboard: predicted events per minute, by class (all sample videos)</figcaption>
+    <div class="cv"><canvas id="cDash"></canvas></div>
+  </figure>
+</section>
+
+<!-- ============================ DEMO -->
+<section id="demo">
+  <header class="sec-head"><span class="eyebrow">Live demo</span><h2>Try it on your own clip</h2>
+    <p>Upload an <b>.mp4 from the same camera</b>, up to <b>1 minute</b> and <b>300 MB</b>. It runs on a free CPU, so expect about 2–4 minutes; a progress bar shows each stage. You get the event table, the timeline, the risk curve and an annotated clip.</p></header>
+  <div class="demo-frame">
+    <iframe id="demoFrame" title="WannaCry live demo" loading="lazy" allow="clipboard-write"></iframe>
+  </div>
+  <p class="note">If the embedded demo does not load, <a id="demoLink" target="_blank" rel="noopener">open it on Hugging Face</a>. The demo uses the lighter YOLO11n model for CPU speed; the submission uses YOLO11m on GPU.</p>
+</section>
+
+<!-- ============================ REPORT -->
+<section id="report">
+  <header class="sec-head"><span class="eyebrow">Technical report</span><h2>What worked, what did not, what next</h2></header>
+  <div class="report">
+    <div>
+      <h3>Worked</h3>
+      <ul>
+        <li>A hand-drawn scene map plus per-video homography: one map serves every clip.</li>
+        <li>Defining the junction box (road minus approach lanes minus queue zones) fixed congestion and stopped-vehicle false alarms from red-light queues.</li>
+        <li>Solid lane lines built from the lanes' vanishing point instead of clicking them by hand.</li>
+        <li>Tuning event boundaries: +0.03 Score A just by matching when people mark the start.</li>
+        <li>A cached track file per video: rule changes re-score in seconds, without the GPU.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Did not work</h3>
+      <ul>
+        <li>Contact-based accident and near-miss rules fired on every queue; near miss is off.</li>
+        <li>A road-obstacle detector from background differences produced only false alarms.</li>
+        <li>OpenCV decoding in a thread was slower than PyAV reference-frame decoding.</li>
+        <li>On Colab's 2 CPU cores even the harness's own full decode takes 3.3× real time, so we could not measure the final time budget there; the judges' machine has 8 cores.</li>
+        <li>Part B cannot be validated: the samples contain no accidents.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Next</h3>
+      <ul>
+        <li>Calibrate Part B and train a clip classifier for accident / near miss on public crash datasets (DoTA, CCD).</li>
+        <li>More labelled footage with a second annotator, to make boundaries and rare classes reliable.</li>
+        <li>Illegal U-turn and wrong-way rules validated on synthetic reversed clips (tooling exists in <code>tools/synth.py</code>).</li>
+        <li>Hardware video decoding to cut runtime.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ LINKS -->
+<section id="links">
+  <header class="sec-head"><span class="eyebrow">Links</span><h2>Everything to reproduce it</h2></header>
+  <ul class="linklist">
+    <li><a href="https://github.com/yelmuratov/Traffic-event-detection-CV-WIUT" target="_blank" rel="noopener"><b>Repository</b><span>code, scene map, labels, README</span></a></li>
+    <li><a href="https://github.com/yelmuratov/Traffic-event-detection-CV-WIUT/blob/main/predictions_samples.json" target="_blank" rel="noopener"><b>predictions_samples.json</b><span>our output on the 4 sample videos</span></a></li>
+    <li><a href="https://github.com/ultralytics/assets/releases/tag/v8.4.0" target="_blank" rel="noopener"><b>Weights</b><span>YOLO11m / YOLO11s, fetched by <code>weights/download.sh</code></span></a></li>
+    <li><a href="https://github.com/yelmuratov/Traffic-event-detection-CV-WIUT/blob/main/labels/labels.txt" target="_blank" rel="noopener"><b>Our dev labels</b><span>77 events, plain text</span></a></li>
+    <li><a id="demoLink2" target="_blank" rel="noopener"><b>Live demo</b><span>Hugging Face Space</span></a></li>
+  </ul>
+</section>
+</main>
+
+<footer class="foot">
+  <p>Team WannaCry · WIUT Hackathon 2026 · Computer Vision Track · Elimination Task</p>
+  <p>Open weights only: YOLO11 (Ultralytics, AGPL-3.0), ByteTrack, OpenCV, PyAV. Footage © the organisers, shown as provided.</p>
+</footer>
+
+<script src="assets/vendor/chart.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

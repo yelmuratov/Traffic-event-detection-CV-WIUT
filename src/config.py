@@ -66,11 +66,17 @@ RISK = {
     "tau_s": 1.5,                    # TTC decay constant: risk = exp(-ttc/tau)
     "max_ttc_s": 5.0,
     "min_closing": 0.6,              # min closing speed (box-heights/s) to count a pair
+    "min_vehicle_speed": 0.5,        # at least one vehicle in the pair must be moving
+    "follow_cos": 0.85,              # headings this similar = car following (normal traffic)
+    "follow_closing": 2.0,           # ... which only counts when closing this fast
+    "follow_ttc_s": 1.0,             # ... and this close in time
+    "aim_cos": 0.97,                 # mover heading straight at a standing object
     "sigma": 0.5,                    # miss-distance tolerance (box-heights)
     "brake_drop": 0.5,               # speed drop fraction counted as hard braking
     "brake_bonus": 0.15,
     "ema": 0.4,                      # smoothing of the output score
-    "gain": 1.0,                     # final calibration: score = clip(gain * raw)
+    "calib_center": 0.80,            # 99.5th percentile of the smoothed conflict level on normal traffic
+    "calib_scale": 0.03,             # score = sigmoid((level - center) / scale)
 }
 
 # ---------------------------------------------------------------- kinematics
