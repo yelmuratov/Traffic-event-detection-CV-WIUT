@@ -59,8 +59,8 @@ TRACKER = {"track_buffer": 50, "track_high_thresh": 0.3, "match_thresh": 0.8}
 # ---------------------------------------------------------------- risk (Part B)
 RISK = {
     "weights": "yolo11n.pt" if DEMO else "yolo11s.pt",
-    "imgsz": 640 if DEMO else 960,
-    "target_hz": 5 if DEMO else 8,   # detections per second of video
+    "imgsz": 640 if DEMO else 800,
+    "target_hz": 5 if DEMO else 6,   # detections per second of video
     "history_s": 0.8,                # window for velocity fit
     "tau_s": 1.5,                    # TTC decay constant: risk = exp(-ttc/tau)
     "max_ttc_s": 5.0,

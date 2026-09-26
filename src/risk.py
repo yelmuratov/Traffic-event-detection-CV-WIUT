@@ -8,9 +8,11 @@ from __future__ import annotations
 
 from collections import deque
 
+import time
+
 import numpy as np
 
-from . import config
+from . import budget, config
 from .tracker import new_model, reset_tracker, _tracker_yaml
 from .utils import set_seed
 from .video import resize_to_width
@@ -35,24 +37,57 @@ class RiskEngine:
         set_seed(config.SEED)
         self.meta = meta or {}
         fps = float(self.meta.get("fps") or 25.0)
+        self.fps = fps
         self.stride = max(1, int(round(fps / C["target_hz"])))
+        self.duration = float(self.meta.get("n_frames") or 0) / fps
         self.i = 0
         self.score = 0.0
         self.ema = 0.0
         self.hist: dict[int, deque] = {}
         self.prev_speed: dict[int, float] = {}
         self.brake = 0.0
+        self.off = False                       # detection switched off to stay inside the time budget
+        self._pace = (time.perf_counter(), 0.0)  # (wall, t_sec) at the last pace check
         if "m" in _SHARED:
             reset_tracker(_SHARED["m"])
 
     # ------------------------------------------------------------------
+    def _check_budget(self, t_sec: float) -> None:
+        """Every ~5 s of video: project the finish time from the recent pace; if it would pass
+        SAFETY x budget, halve the detection rate (and finally stop detecting). A video over the
+        budget loses everything, so a sparser risk curve is always the better trade."""
+        if self.off or self.duration <= 0:
+            return
+        now = time.perf_counter()
+        w0, t0 = self._pace
+        if t_sec - t0 < 5.0:
+            return
+        rate = (now - w0) / (t_sec - t0)      # wall seconds per video second, recent window
+        self._pace = (now, t_sec)
+        spent = budget.elapsed(self.meta.get("video_id", ""))
+        if spent is None:
+            return
+        projected = spent + (self.duration - t_sec) * rate
+        if projected > budget.SAFETY * budget.TIME_FACTOR * self.duration:
+            self.stride *= 2
+            if self.stride > 8 * self.fps:
+                self.off = True
+
     def step(self, frame: np.ndarray, t_sec: float) -> float:
         i = self.i
         self.i += 1
+        if i % max(1, int(self.fps)) == 0:
+            self._check_budget(t_sec)
+        if self.off:
+            self.score *= 0.98                 # decay the last estimate, no detection
+            return self.score
         if i % self.stride:
             return self.score
         model, yaml = _model()
-        small, s = resize_to_width(frame, config.DETECTOR["max_width"])
+        if frame.shape[1] >= 2 * config.DETECTOR["max_width"]:
+            small, s = frame[::2, ::2], 0.5    # exact 2x subsample: far cheaper than cv2.resize on 4K
+        else:
+            small, s = resize_to_width(frame, config.DETECTOR["max_width"])
         res = model.track(small, persist=True, tracker=yaml, classes=config.DET_CLASSES,
                           conf=config.DETECTOR["conf"], iou=config.DETECTOR["iou"], imgsz=C["imgsz"],
                           half=config.HALF, device=config.DEVICE, verbose=False)[0]
@@ -121,7 +156,8 @@ class RiskEngine:
         rad = 0.5 * (a[i, 4] + a[j, 4]) / 2 / hn
         miss = np.maximum(0.0, dmin - rad)
         ok = (tstar > 0) & (tstar < C["max_ttc_s"]) & (closing > C["min_closing"]) & (dist < 6)
-        pr = np.where(ok, np.exp(-tstar / C["tau_s"]) * np.exp(-(miss ** 2) / (2 * C["sigma"] ** 2)), 0.0)
+        ts_ = np.clip(tstar, 0.0, C["max_ttc_s"])        # clipped: no overflow on receding pairs
+        pr = np.where(ok, np.exp(-ts_ / C["tau_s"]) * np.exp(-(np.minimum(miss, 10.0) ** 2) / (2 * C["sigma"] ** 2)), 0.0)
         top = np.sort(pr)[-3:]
         pair = 1.0 - np.prod(1.0 - top)
         return float(min(1.0, pair + self.brake))

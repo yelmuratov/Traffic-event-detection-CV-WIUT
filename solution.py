@@ -7,6 +7,7 @@ import logging
 
 import numpy as np
 
+from src import budget
 from src.pipeline import detect_events as _detect_events
 from src.risk import RiskEngine
 from src.utils import set_seed
@@ -21,6 +22,7 @@ CLASSES = ["accident", "near_miss", "red_light", "wrong_way", "illegal_u_turn",
 
 def detect_events(video_path: str) -> list[list]:
     """Part A. Return [[start_sec, end_sec, label], ...] for one .mp4."""
+    budget.mark_start(video_path)   # Part B uses this to stay inside the shared 3x time budget
     return _detect_events(video_path)
 
 
