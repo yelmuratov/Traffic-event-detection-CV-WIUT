@@ -99,7 +99,7 @@ ENABLED = {
     "solid_line_crossing": True,
     "stop_line": True,
     "congestion": True,
-    "road_obstacle": True,    # new static non-vehicle object on the road (background comparison)
+    "road_obstacle": False,   # new static non-vehicle object on the road (background comparison)
     "fire_smoke": False,      # no reliable detector yet
 }
 
