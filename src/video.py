@@ -56,7 +56,8 @@ def resize_to_width(frame: np.ndarray, max_width: int | None) -> tuple[np.ndarra
     if not max_width or frame.shape[1] <= max_width:
         return frame, 1.0
     s = max_width / frame.shape[1]
-    out = cv2.resize(frame, (max_width, int(round(frame.shape[0] * s))), interpolation=cv2.INTER_AREA)
+    # INTER_LINEAR: several times cheaper than INTER_AREA on 4K frames, same detections in practice
+    out = cv2.resize(frame, (max_width, int(round(frame.shape[0] * s))), interpolation=cv2.INTER_LINEAR)
     return out, s
 
 
