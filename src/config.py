@@ -110,7 +110,7 @@ RULES = {
     "stop_line": {"max_after_stop_s": 90.0},
     "jaywalking": {"min_s": 2.0, "crosswalk_buffer_px": 60, "rider_overlap": 0.3, "min_speed": 0.3},
     "failure_to_yield": {"ped_buffer_px": 20, "min_vehicle_speed": 0.8, "near_w": 1.5, "ped_min_speed": 0.3},
-    "solid_line": {"min_cross_px": 5, "max_s": 6.0},
+    "solid_line": {"min_cross_px": 5, "min_cross_w": 0.3, "max_s": 4.0, "persist_s": 1.0, "min_speed": 0.8},
     "turn": {"turn_deg": 60, "u_turn_deg": 150, "window_s": 12.0, "onset_deg": 10},
     "near_miss": {"ttc_s": 0.7, "decel_frac": 0.5, "swerve_deg": 25, "react_s": 1.5, "min_speed": 1.2},
     "accident": {"contact_iou": 0.15, "depth_frac": 0.12, "min_closing": 0.5, "stop_within_s": 3.0,

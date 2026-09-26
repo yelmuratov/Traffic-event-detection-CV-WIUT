@@ -1,0 +1,28 @@
+# ============================================================================================
+#  OUR LABELS (dev set).  One event per line:   VIDEO   START - END   CLASS
+#  Times: seconds (75.5) or minutes:seconds (1:15.5), exactly as your video player shows them.
+#  Lines starting with # are ignored.  Colab converts this file into my_labels.json.
+#
+#  CLASSES (use exactly these names) and WHEN an event starts / ends:
+#   jaywalking          person walking on the road OUTSIDE a zebra        start: steps onto road   end: leaves road
+#   red_light           car crosses the stop line while its light is red  start: front crosses line end: leaves junction/frame
+#   stop_line           car stops PAST the stop line on red (on/after it) start: it stops            end: light turns green
+#   failure_to_yield    car drives through a zebra while a person is on it start: car enters zebra   end: car leaves zebra
+#   stopped_vehicle     car standing >=10 s on the road, NOT in a red-light queue  start: stops    end: moves again
+#   wrong_way           car driving against its lane direction            start: enters wrong lane  end: back / leaves frame
+#   illegal_turn        turn from wrong lane / forbidden direction        start: starts turning     end: turn finished
+#   illegal_u_turn      U-turn where it is not allowed                    start: starts turning     end: turn finished
+#   solid_line_crossing crossing a solid painted line                     start: wheel on line      end: fully in new lane
+#   congestion          ALL lanes of one direction at standstill/crawling (not a normal red queue) start: stops  end: clears
+#   near_miss           sharp braking / swerve to avoid a crash, no contact start: evasive action   end: clear of each other
+#   accident            contact between road users                        start: first contact      end: all stopped/left
+#   road_obstacle       debris / animal / fallen object on the road       start: appears            end: removed
+#   fire_smoke          visible fire or smoke                             start: first smoke        end: clears
+#
+#  Two things at once = two lines.  Same class twice at the same time = ONE line covering both.
+# ============================================================================================
+
+# examples (delete these two lines):
+# C3905  0:12.5 - 0:18.0  jaywalking
+# C3905  1:04.0 - 1:07.5  red_light
+

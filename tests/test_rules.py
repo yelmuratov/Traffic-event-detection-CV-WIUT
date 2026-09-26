@@ -80,7 +80,7 @@ def test_jaywalking():
 
 def test_solid_line():
     ts = times(0, 8)
-    path = [(t, (100 + 120 * t, 450 + (60 if t > 4 else 15 * t))) for t in ts]
+    path = [(t, (100 + 120 * t, 420 + min(40 * t, 120))) for t in ts]  # lane change across y=480 at t=1.5
     ev = rule_solid_line(make_ctx(track(1, 2, path), {"solid_lines": [[[0, 480], [1280, 480]]]}))
     assert len(ev) == 1
 
@@ -106,3 +106,10 @@ def test_postprocess_valid():
     raw = [(1, 3, "jaywalking"), (3.5, 5, "jaywalking"), (2, 2.2, "wrong_way"), (4, 9, "accident"), (5, 6, "near_miss")]
     ev = postprocess(raw, 8.0)
     assert ev == [[1.0, 5.0, "jaywalking"], [4.0, 8.0, "accident"]]
+
+
+def test_solid_line_ignores_drift_along_line():
+    ts = times(0, 10)
+    path = [(t, (100 + 120 * t, 480 + 6 * np.sin(3 * t))) for t in ts]   # rides on the line, jittering
+    ev = rule_solid_line(make_ctx(track(1, 2, path), {"solid_lines": [[[0, 480], [1280, 480]]]}))
+    assert ev == []

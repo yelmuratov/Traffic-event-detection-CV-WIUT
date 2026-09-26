@@ -64,6 +64,41 @@ def clip(video: str, t0: float, t1: float, out: str, width: int = 1280) -> str:
     return out
 
 
+def _sec(tok: str) -> float:
+    """'75.5' or '1:15.5' or '0:01:15.5' -> seconds."""
+    parts = [float(x) for x in tok.strip().split(":")]
+    sec = 0.0
+    for x in parts:
+        sec = sec * 60 + x
+    return sec
+
+
+def from_txt(txt_path: str, video_dir: str) -> dict:
+    """Plain-text labels -> labels dict.  One event per line:
+        C3897  1:04.0 - 1:07.5  red_light
+    Lines starting with # are comments. Video name without .mp4 is fine."""
+    labels = skeleton(video_dir)
+    names = {os.path.splitext(k)[0].lower(): k for k in labels}
+    errors = []
+    for n, line in enumerate(open(txt_path, encoding="utf-8"), 1):
+        line = line.split("#")[0].strip()
+        if not line:
+            continue
+        try:
+            vid, rest = line.split(None, 1)
+            times, lab = rest.rsplit(None, 1)
+            a, b = times.replace(" ", "").split("-")
+            key = names[os.path.splitext(vid)[0].lower()]
+            labels[key]["events"].append([round(_sec(a), 2), round(_sec(b), 2), lab.strip()])
+        except Exception as exc:
+            errors.append(f"line {n}: {line!r} ({exc})")
+    for d in labels.values():
+        d["events"].sort(key=lambda x: (x[0], x[2]))
+    if errors:
+        print("Could not read:\n  " + "\n  ".join(errors))
+    return labels
+
+
 def summary(labels: dict) -> dict:
     from collections import Counter
     c = Counter(e[2] for d in labels.values() for e in d["events"])
@@ -76,6 +111,7 @@ if __name__ == "__main__":
     a = sub.add_parser("skeleton"); a.add_argument("videos"); a.add_argument("out")
     a = sub.add_parser("merge"); a.add_argument("files", nargs="+"); a.add_argument("--out", required=True)
     a = sub.add_parser("check"); a.add_argument("file")
+    a = sub.add_parser("txt"); a.add_argument("txt"); a.add_argument("videos"); a.add_argument("out")
     a = sub.add_parser("clip"); a.add_argument("video"); a.add_argument("t0", type=float); a.add_argument("t1", type=float); a.add_argument("out")
     args = ap.parse_args()
     if args.cmd == "skeleton":
@@ -88,5 +124,9 @@ if __name__ == "__main__":
     elif args.cmd == "check":
         lab = json.load(open(args.file))
         print("\n".join(check(lab)) or "OK", "\n", summary(lab))
+    elif args.cmd == "txt":
+        lab = from_txt(args.txt, args.videos)
+        print("\n".join(check(lab)) or "OK", "\n", summary(lab))
+        json.dump(lab, open(args.out, "w"), indent=1)
     elif args.cmd == "clip":
         print(clip(args.video, args.t0, args.t1, args.out))

@@ -282,11 +282,21 @@ def rule_solid_line(ctx: Ctx):
                 ok = (u > 0) & (u < 1)
                 sgn = np.where(dist >= 0, 1, -1)
                 idx = np.flatnonzero((sgn[:-1] * sgn[1:] < 0) & ok[:-1] & ok[1:])
+                spd = g["speed_n"].to_numpy()
+                w_ = g["w"].to_numpy()
                 for i in idx:
-                    before = (t > t[i] - 0.5) & (t <= t[i]) & (sgn == sgn[i])
-                    after_ = (t >= t[i + 1]) & (t < t[i + 1] + 0.5) & (sgn == sgn[i + 1])
-                    if before.sum() < 2 or after_.sum() < 2 or np.abs(dist[after_]).max() < c["min_cross_px"]:
+                    pw = c["persist_s"]
+                    win_b = (t > t[i] - pw) & (t <= t[i])
+                    win_a = (t >= t[i + 1]) & (t < t[i + 1] + pw)
+                    if win_b.sum() < 3 or win_a.sum() < 3:
                         continue
+                    # clearly on the old side before and on the new side after (not jitter along the line)
+                    if (sgn[win_b] == sgn[i]).mean() < 0.9 or (sgn[win_a] == sgn[i + 1]).mean() < 0.9:
+                        continue
+                    if np.abs(dist[win_a]).max() < max(c["min_cross_px"], c["min_cross_w"] * w_[i]):
+                        continue
+                    if np.median(spd[win_b | win_a]) < c["min_speed"]:
+                        continue  # queued / creeping cars drifting over the paint
                     touch = np.abs(dist) <= ext
                     s = i
                     while s > 0 and touch[s - 1] and t[i] - t[s - 1] < c["max_s"]:
@@ -294,6 +304,8 @@ def rule_solid_line(ctx: Ctx):
                     e = i + 1
                     while e < len(t) - 1 and touch[e] and t[e] - t[i] < c["max_s"]:
                         e += 1
+                    if t[e] - t[s] > c["max_s"]:
+                        continue  # a real lane change takes a few seconds, not a long drift
                     out.append((t[s], max(t[e], t[s] + 0.5), "solid_line_crossing"))
     return out
 
