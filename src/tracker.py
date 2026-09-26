@@ -146,7 +146,7 @@ def analyse_video(meta: VideoMeta, scene=None, want_tracks: bool = True, progres
     else:
         frames = iter_frames(meta.path, stride=det["stride"], max_width=det["max_width"])
     det_every = max(1, int(det.get("det_every", 1)))
-    for k, (fi, t, frame, s) in enumerate(frames):
+    for n_dec, (fi, t, frame, s) in enumerate(frames):
         if need_signals:
             sig_t.append(t)
             for k, sc in scene.signals.items():
@@ -158,7 +158,7 @@ def analyse_video(meta: VideoMeta, scene=None, want_tracks: bool = True, progres
                 thumb_t.append(t)
                 thumb_img.append(cv2.cvtColor(cv2.resize(frame, (tw, th_), interpolation=cv2.INTER_AREA),
                                               cv2.COLOR_BGR2GRAY))
-            if k % det_every == 0:              # detector on every det_every-th decoded frame
+            if n_dec % det_every == 0:          # detector on every det_every-th decoded frame
                 batch.append((fi, t, frame, s))
                 if len(batch) >= det["batch"]:
                     flush()
