@@ -84,8 +84,9 @@ class RiskEngine:
         if i % self.stride:
             return self.score
         model, yaml = _model()
-        if frame.shape[1] >= 2 * config.DETECTOR["max_width"]:
-            small, s = frame[::2, ::2], 0.5    # exact 2x subsample: far cheaper than cv2.resize on 4K
+        k = frame.shape[1] // config.DETECTOR["max_width"]
+        if k >= 2:
+            small, s = frame[::k, ::k], 1.0 / k  # integer subsample: far cheaper than cv2.resize on 4K
         else:
             small, s = resize_to_width(frame, config.DETECTOR["max_width"])
         res = model.track(small, persist=True, tracker=yaml, classes=config.DET_CLASSES,
