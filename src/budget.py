@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 import time
 
-TIME_FACTOR = 3.0   # official budget multiplier
+TIME_FACTOR = float(os.environ.get("WIUT_TIME_FACTOR", 3.0))   # official budget multiplier (override for dev runs only)
 SAFETY = 0.90       # aim to finish within 90 % of the budget
 
 _START: dict[str, float] = {}

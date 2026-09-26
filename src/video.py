@@ -108,7 +108,7 @@ def iter_frames(path: str, stride: int = 1, max_width: int | None = None, start:
         while th.is_alive():
             try:
                 q.get_nowait()
-            except queue.Empty:
+            except Exception:  # queue.Empty (queue may already be torn down at interpreter exit)
                 th.join(timeout=0.05)
 
 
@@ -166,5 +166,5 @@ def iter_frames_fast(path: str, max_width: int | None = 1920, skip_nonref: bool 
         while th.is_alive():
             try:
                 q.get_nowait()
-            except queue.Empty:
+            except Exception:  # queue.Empty (queue may already be torn down at interpreter exit)
                 th.join(timeout=0.05)
