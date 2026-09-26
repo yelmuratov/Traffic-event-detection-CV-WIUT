@@ -13,7 +13,8 @@ from src.risk import RiskEngine
 from src.utils import set_seed
 
 set_seed(42)
-logging.getLogger("wiut").setLevel(logging.INFO)
+logging.basicConfig(level=logging.WARNING, format="%(name)s: %(message)s")
+logging.getLogger("wiut").setLevel(logging.INFO)   # per-video timing lines in the harness log
 
 CLASSES = ["accident", "near_miss", "red_light", "wrong_way", "illegal_u_turn",
            "stopped_vehicle", "jaywalking", "failure_to_yield", "illegal_turn",
