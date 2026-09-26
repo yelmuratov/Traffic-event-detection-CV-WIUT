@@ -428,7 +428,8 @@ def _speed_at(g: pd.DataFrame, t0: float, t1: float) -> np.ndarray:
 
 
 def rule_pairs(ctx: Ctx):
-    ca, cn = R["accident"], R["near_miss"]
+    """near_miss from time-to-collision + evasive action (disabled by default, see config)."""
+    cn = R["near_miss"]
     pt = _pair_table(ctx)
     ctx._cache["pairs"] = pt
     out = []
@@ -436,27 +437,6 @@ def rule_pairs(ctx: Ctx):
         ga, gb = ctx.series(a), ctx.series(b)
         t = g["t"].to_numpy()
         cont = g["contact"].to_numpy()
-        # ---------------- accident
-        if cont.any() and (ctx.enabled("accident")):
-            k = int(np.argmax(cont))
-            tc = t[k]
-            pre_ok = ((t < tc - 0.5) & ~cont).any()              # seen apart before touching
-            closing = g["closing"].to_numpy()[(t >= tc - 1) & (t <= tc)].max() > ca["min_closing"]
-            sp_before = np.concatenate([_speed_at(ga, tc - 1, tc), _speed_at(gb, tc - 1, tc), [0]]).max()
-            hold = cont[(t >= tc) & (t <= tc + ca["hold_s"])]
-            held = len(hold) > 0 and hold.mean() >= ca["hold_frac"]         # boxes stay together
-            in_queue = _in_queue(ctx, ga, gb, tc)
-            if pre_ok and closing and held and not in_queue and sp_before > ca["min_speed_before"]:
-                ends = []
-                for gg in (ga, gb):
-                    ts = _first_stationary_after(gg, tc)
-                    if ts is None and gg["t"].max() <= tc + ca["stop_within_s"]:
-                        ts = gg["t"].max()                      # left the frame
-                    ends.append(ts)
-                if all(e is not None and e - tc <= ca["stop_within_s"] for e in ends):
-                    end = min(max(max(ends), tc + 1.0), tc + ca["max_s"])
-                    out.append((tc, end, "accident"))
-                    continue
         # ---------------- near miss
         if cont.any() or not ctx.enabled("near_miss"):
             continue
@@ -493,6 +473,126 @@ def rule_pairs(ctx: Ctx):
     return out
 
 
+# ============================================================ accident (strict)
+def rule_accident(ctx: Ctx):
+    """Two vehicles come into contact OUTSIDE the signal queues, then BOTH stay stopped for
+    hold_s while the traffic around them keeps flowing. Normal queues and jams fail the last test."""
+    c = R["accident_strict"]
+    pt = ctx._cache.get("pairs")
+    if pt is None:
+        pt = _pair_table(ctx)
+        ctx._cache["pairs"] = pt
+    veh = set(ctx.vehicles["tid"].unique())
+    out = []
+    for (a, b), g in pt[pt["contact"]].groupby(["a", "b"]):
+        if a not in veh or b not in veh:
+            continue
+        full = pt[(pt["a"] == a) & (pt["b"] == b)]
+        tc = g["t"].iloc[0]
+        if not ((full["t"] < tc - 0.5) & ~full["contact"]).any():
+            continue                                    # never seen apart: a double detection, not a crash
+        ga, gb = ctx.series(a), ctx.series(b)
+        ra, rb = ga.iloc[(ga["t"] - tc).abs().argmin()], gb.iloc[(gb["t"] - tc).abs().argmin()]
+        cx, cy = (ra["gx"] + rb["gx"]) / 2, (ra["gy"] + rb["gy"]) / 2
+        hn = (ra["h"] + rb["h"]) / 2
+        if not ctx.scene.on_road([cx], [cy])[0] or \
+                (ctx.scene.queue_zones and ctx.scene.in_queue_zone([cx], [cy])[0]):
+            continue
+        pre = np.concatenate([_speed_at(ga, tc - 2, tc), _speed_at(gb, tc - 2, tc), [0]])
+        if pre.max() < c["min_speed_before"]:
+            continue                                    # nobody was moving: parked / queued contact
+        stops = []
+        for gg in (ga, gb):
+            after = gg[(gg["t"] >= tc) & (gg["t"] <= tc + c["stop_within_s"] + c["hold_s"] + 1)]
+            st = None
+            for s0, s1 in runs(after["speed_n"].to_numpy() < STAT, after["t"].to_numpy(), max_gap=0.7):
+                if s0 - tc <= c["stop_within_s"] and s1 - s0 >= c["hold_s"]:
+                    st = s0
+                    break
+            stops.append(st)
+        if any(s_ is None for s_ in stops):
+            continue
+        # the rest of the traffic nearby keeps moving (rules out red-light queues and jams)
+        v = ctx.vehicles
+        w = v[(v["t"] > tc + c["stop_within_s"]) & (v["t"] < tc + c["stop_within_s"] + c["hold_s"])
+              & ~v["tid"].isin([a, b])]
+        w = w[np.hypot(w["gx"] - cx, w["gy"] - cy) < c["flow_radius"] * hn]
+        if len(w) < c["min_flow_samples"] or np.median(w["speed_n"]) < c["flow_speed"]:
+            continue
+        out.append((tc, max(max(stops), tc + 1.0), "accident"))
+    return out
+
+
+# ============================================================ road obstacle (background comparison)
+def rule_road_obstacle(ctx: Ctx):
+    """A new object that stays still on the carriageway for persist_s and is not a tracked
+    vehicle or person: compare sparse grey thumbnails against the video's median background."""
+    import cv2
+    th = ctx.signals.get("__thumbs__") if ctx.signals else None
+    if th is None or not ctx.scene.road:
+        return []
+    ts, imgs = th
+    if len(ts) < 20:
+        return []
+    c = R["road_obstacle"]
+    H, W = imgs.shape[1:]
+    sx, sy = W / ctx.scene.width, H / ctx.scene.height
+    road = np.zeros((H, W), np.uint8)
+    for p in ctx.scene.road:
+        cv2.fillPoly(road, [(p.pts * [sx, sy]).astype(np.int32)], 1)
+    for p in ctx.scene.ignore_zones:
+        cv2.fillPoly(road, [(p.pts * [sx, sy]).astype(np.int32)], 0)
+    road = cv2.erode(road, np.ones((5, 5), np.uint8)).astype(bool)
+    imgs = np.stack([cv2.GaussianBlur(im, (5, 5), 0) for im in imgs]).astype(np.float32)
+    ref = np.median(imgs[:, road], axis=1, keepdims=True)                       # per-frame brightness
+    imgs[:, road] = imgs[:, road] * (np.median(ref) / np.maximum(ref, 1))       # lighting normalisation
+    # two backgrounds (first and last third of the clip). A pixel is foreground only if it differs from
+    # BOTH: slow global changes (moving tree shadows, sun) differ from just one, so this stays quiet on
+    # normal footage. Trade-off: an obstacle still present at the very end of the clip is missed.
+    n3 = max(3, len(ts) // 3)
+    bg_early, bg_late = np.median(imgs[:n3], axis=0), np.median(imgs[-n3:], axis=0)
+    df = ctx.df
+    kernel = np.ones((3, 3), np.uint8)
+    blobs_t = []
+    for i, t in enumerate(ts):
+        diff = np.minimum(np.abs(imgs[i] - bg_early), np.abs(imgs[i] - bg_late))
+        fg = ((diff > c["diff"]) & road).astype(np.uint8)
+        near = df[(df["t"] - t).abs() < 0.4]
+        for r in near.itertuples():                                              # remove every tracked object
+            pw, ph = (r.x2 - r.x1) * c["box_pad"], (r.y2 - r.y1) * c["box_pad"]
+            x1, y1 = int((r.x1 - pw) * sx), int((r.y1 - ph) * sy)
+            x2, y2 = int((r.x2 + pw) * sx) + 1, int((r.y2 + ph) * sy) + 1
+            fg[max(0, y1):y2, max(0, x1):x2] = 0
+        fg = cv2.morphologyEx(fg, cv2.MORPH_OPEN, kernel)
+        n, lab, stats, cent = cv2.connectedComponentsWithStats(fg)
+        keep = []
+        for k in range(1, n):
+            x, y, w_, h_, area = stats[k]
+            if not (c["min_area"] <= area <= c["max_area"]):
+                continue
+            if area / float(w_ * h_) < c["min_fill"] or max(w_, h_) / max(1, min(w_, h_)) > c["max_aspect"]:
+                continue                                                         # thin shadow edges, lane paint
+            keep.append(cent[k])
+        blobs_t.append(keep)
+    # link blobs that stay at the same place over consecutive samples
+    out, active = [], []                                                         # active: [cx, cy, t_start, t_last]
+    for t, blobs in zip(ts, blobs_t):
+        nxt = []
+        for bx, by in blobs:
+            m = next((a for a in active if abs(a[0] - bx) < c["link_px"] and abs(a[1] - by) < c["link_px"]), None)
+            nxt.append([bx, by, m[2] if m else t, t])
+        ended = [a for a in active if not any(abs(a[0] - n_[0]) < c["link_px"] and abs(a[1] - n_[1]) < c["link_px"]
+                                              for n_ in nxt)]
+        for a in ended:
+            if a[3] - a[2] >= c["persist_s"]:
+                out.append((a[2], a[3], "road_obstacle"))
+        active = nxt
+    for a in active:
+        if a[3] - a[2] >= c["persist_s"]:
+            out.append((a[2], min(a[3] + 1.0, ctx.duration), "road_obstacle"))
+    return out
+
+
 # ============================================================ runner
 RULE_FUNCS = [
     ("stopped_vehicle", rule_stopped_vehicle),
@@ -503,7 +603,9 @@ RULE_FUNCS = [
     ("failure_to_yield", rule_failure_to_yield),
     ("solid_line_crossing", rule_solid_line),
     (("illegal_turn", "illegal_u_turn"), rule_turns),
-    (("accident", "near_miss"), rule_pairs),
+    ("near_miss", rule_pairs),
+    ("accident", rule_accident),
+    ("road_obstacle", rule_road_obstacle),
 ]
 
 

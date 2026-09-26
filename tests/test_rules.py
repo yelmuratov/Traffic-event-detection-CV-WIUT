@@ -113,3 +113,50 @@ def test_solid_line_ignores_drift_along_line():
     path = [(t, (100 + 120 * t, 480 + 6 * np.sin(3 * t))) for t in ts]   # rides on the line, jittering
     ev = rule_solid_line(make_ctx(track(1, 2, path), {"solid_lines": [[[0, 480], [1280, 480]]]}))
     assert ev == []
+
+
+def _crash_rows(third_moves=True):
+    ts = times(0, 25)
+    a = [(t, (400 + 150 * min(t, 1.87), 600)) for t in ts]          # stops at x~680
+    b = [(t, (1000 - 150 * min(t, 1.87), 600)) for t in ts]         # stops at x~720 -> boxes overlap
+    c = [(t, ((100 + 150 * t) % 1200 if third_moves else 300, 420)) for t in ts]
+    return track(1, 2, a) + track(2, 2, b) + track(3, 2, c)
+
+
+def test_accident_strict():
+    from src.rules import rule_accident
+    ev = rule_accident(make_ctx(_crash_rows(True), {}))
+    assert len(ev) == 1 and 1.0 < ev[0][0] < 3.0
+
+
+def test_accident_not_in_jam():
+    from src.rules import rule_accident
+    assert rule_accident(make_ctx(_crash_rows(False), {})) == []          # everything stopped: a jam
+
+
+def test_accident_not_in_queue_zone():
+    from src.rules import rule_accident
+    q = [[[500, 500], [900, 500], [900, 700], [500, 700]]]
+    assert rule_accident(make_ctx(_crash_rows(True), {"queue_zones": q})) == []
+
+
+def test_road_obstacle():
+    from src.rules import rule_road_obstacle
+    rng = np.random.default_rng(0)
+    ts = np.arange(0, 120, 2.0).astype(np.float32)
+    imgs = (100 + rng.normal(0, 3, (len(ts), 360, 640))).clip(0, 255).astype(np.uint8)
+    imgs[20:36, 200:210, 300:310] = 200                                   # object on the road for 32 s
+    ctx = make_ctx(track(9, 2, lin((100, 700), (0, 0), times(0, 5))), {}, duration=120.0)
+    ctx.signals = {"__thumbs__": (ts, imgs)}
+    ev = rule_road_obstacle(ctx)
+    assert len(ev) == 1 and abs(ev[0][0] - 40) < 1 and ev[0][1] > 65
+
+
+def test_road_obstacle_quiet_on_static_scene():
+    from src.rules import rule_road_obstacle
+    rng = np.random.default_rng(1)
+    ts = np.arange(0, 120, 2.0).astype(np.float32)
+    imgs = (100 + rng.normal(0, 3, (len(ts), 360, 640))).clip(0, 255).astype(np.uint8)
+    ctx = make_ctx(track(9, 2, lin((100, 700), (0, 0), times(0, 5))), {}, duration=120.0)
+    ctx.signals = {"__thumbs__": (ts, imgs)}
+    assert rule_road_obstacle(ctx) == []

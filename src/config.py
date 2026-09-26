@@ -53,6 +53,7 @@ DETECTOR = {
     "batch": 1 if DEMO else 8,       # frames per GPU call
     "max_width": 1920,               # frames are downscaled to this width before the model
 }
+THUMBS = {"every_s": 2.0, "width": 640, "height": 360}   # grey background samples (road_obstacle)
 TRACKER = {"track_buffer": 50, "track_high_thresh": 0.3, "match_thresh": 0.8}
 
 # ---------------------------------------------------------------- risk (Part B)
@@ -84,10 +85,9 @@ KIN = {
 # Classes we actually output. Predicting a class that is not in the test set
 # costs a whole class worth of F1, so only enable what is validated on labels.
 ENABLED = {
-    # accident / near_miss: dense junction traffic overlaps in this camera view, and the rules gave
-    # only false alarms on the samples. Off in Part A until a reliable detector exists (Part B still
-    # estimates accident risk).
-    "accident": False,
+    # near_miss: box contacts / TTC in this dense view gave only false alarms on the samples -> off.
+    # accident uses a separate strict rule (rule_accident) instead of the contact heuristic.
+    "accident": True,         # strict rule: meet in the junction, both stay stopped while traffic flows
     "near_miss": False,
     "red_light": True,
     "wrong_way": True,
@@ -99,7 +99,7 @@ ENABLED = {
     "solid_line_crossing": True,
     "stop_line": True,
     "congestion": True,
-    "road_obstacle": False,   # no reliable detector yet
+    "road_obstacle": True,    # new static non-vehicle object on the road (background comparison)
     "fire_smoke": False,      # no reliable detector yet
 }
 
@@ -114,6 +114,10 @@ RULES = {
     "solid_line": {"min_cross_px": 5, "min_cross_w": 0.3, "max_s": 4.0, "persist_s": 1.0, "min_speed": 0.8},
     "turn": {"turn_deg": 60, "u_turn_deg": 150, "window_s": 12.0, "onset_deg": 10},
     "near_miss": {"ttc_s": 0.7, "decel_frac": 0.5, "swerve_deg": 25, "react_s": 1.5, "min_speed": 1.2},
+    "accident_strict": {"stop_within_s": 3.0, "hold_s": 10.0, "min_speed_before": 1.0,
+                        "flow_radius": 8.0, "flow_speed": 0.5, "min_flow_samples": 5},
+    "road_obstacle": {"diff": 35, "persist_s": 10.0, "min_area": 20, "max_area": 2500,
+                      "min_fill": 0.35, "max_aspect": 4.0, "link_px": 12, "box_pad": 0.3},
     "accident": {"contact_iou": 0.15, "depth_frac": 0.12, "min_closing": 0.5, "stop_within_s": 3.0,
                  "max_s": 30.0, "min_speed_before": 1.0, "hold_s": 1.0, "hold_frac": 0.6},
 }

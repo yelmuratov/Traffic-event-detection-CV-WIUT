@@ -15,6 +15,7 @@ import tempfile
 import time
 from pathlib import Path
 
+import cv2
 import numpy as np
 
 from . import config
@@ -93,14 +94,17 @@ def analyse_video(meta: VideoMeta, scene=None, want_tracks: bool = True, progres
     det = config.DETECTOR
     signals_cfg = {k: {kk: list(map(int, vv)) for kk, vv in v.items()} for k, v in (scene.signals if scene else {}).items()}
     vkey = video_key(meta.path)
-    tr_cfg = {"det": det, "trk": config.TRACKER, "classes": config.DET_CLASSES}
+    tr_cfg = {"det": det, "trk": config.TRACKER, "classes": config.DET_CLASSES, "thumbs": config.THUMBS}
     tr_cache = _cache_path("tracks", vkey, tr_cfg)
     sg_cache = _cache_path("signals", vkey, {"sig": signals_cfg, "stride": det["stride"],
                                              "decoder": det.get("decoder"), "w": det["max_width"]})
 
-    tracks = signals = None
+    tracks = signals = thumbs = None
     if tr_cache and tr_cache.exists():
-        tracks = np.load(tr_cache)["tracks"]
+        z = np.load(tr_cache)
+        tracks = z["tracks"]
+        if "thumbs" in z:
+            thumbs = (z["thumb_t"], z["thumbs"])
     if sg_cache and sg_cache.exists():
         z = np.load(sg_cache, allow_pickle=True)
         signals = z["signals"].item()
@@ -109,7 +113,8 @@ def analyse_video(meta: VideoMeta, scene=None, want_tracks: bool = True, progres
     need_tracks = want_tracks and tracks is None
     need_signals = signals is None
     if not need_tracks and not need_signals:
-        return (tracks if tracks is not None else np.zeros((0, len(TRACK_COLS)), np.float32)), signals
+        return (tracks if tracks is not None else np.zeros((0, len(TRACK_COLS)), np.float32)), \
+            _with_thumbs(signals, thumbs)
 
     set_seed(config.SEED)
     model = load_model(det["weights"]) if need_tracks else None
@@ -120,6 +125,9 @@ def analyse_video(meta: VideoMeta, scene=None, want_tracks: bool = True, progres
     sig_t: list = []
     sig_s: dict = {k: [] for k in signals_cfg}
     batch: list = []
+    thumb_t: list = []
+    thumb_img: list = []
+    tw, th_ = config.THUMBS["width"], config.THUMBS["height"]
     t0 = time.time()
 
     def flush():
@@ -144,6 +152,11 @@ def analyse_video(meta: VideoMeta, scene=None, want_tracks: bool = True, progres
                 # signal ROIs are in full-resolution pixels; the frame may be downscaled by s
                 sig_s[k].append(signal_state(frame, {kk: (np.asarray(vv) * s).round().astype(int) for kk, vv in sc.items()}))
         if need_tracks:
+            if not thumb_t or t - thumb_t[-1] >= config.THUMBS["every_s"]:
+                # small grey background samples for the road-obstacle detector
+                thumb_t.append(t)
+                thumb_img.append(cv2.cvtColor(cv2.resize(frame, (tw, th_), interpolation=cv2.INTER_AREA),
+                                              cv2.COLOR_BGR2GRAY))
             batch.append((fi, t, frame, s))
             if len(batch) >= det["batch"]:
                 flush()
@@ -152,8 +165,9 @@ def analyse_video(meta: VideoMeta, scene=None, want_tracks: bool = True, progres
     if need_tracks:
         flush()
         tracks = np.asarray(rows, np.float32).reshape(-1, len(TRACK_COLS))
+        thumbs = (np.asarray(thumb_t, np.float32), np.stack(thumb_img) if thumb_img else np.zeros((0, th_, tw), np.uint8))
         if tr_cache:
-            np.savez_compressed(tr_cache, tracks=tracks)
+            np.savez_compressed(tr_cache, tracks=tracks, thumb_t=thumbs[0], thumbs=thumbs[1])
     if need_signals:
         signals = {k: (np.asarray(sig_t, np.float32), np.asarray(v, np.int8)) for k, v in sig_s.items()}
         if sg_cache:
@@ -162,4 +176,12 @@ def analyse_video(meta: VideoMeta, scene=None, want_tracks: bool = True, progres
              (time.time() - t0) / max(meta.duration, 1e-6))
     if tracks is None:
         tracks = np.zeros((0, len(TRACK_COLS)), np.float32)
-    return tracks, signals
+    return tracks, _with_thumbs(signals, thumbs)
+
+
+def _with_thumbs(signals: dict | None, thumbs) -> dict:
+    """Signals dict plus the background thumbnails under the reserved key '__thumbs__'."""
+    out = dict(signals or {})
+    if thumbs is not None:
+        out["__thumbs__"] = thumbs
+    return out

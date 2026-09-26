@@ -22,7 +22,93 @@
 #  Two things at once = two lines.  Same class twice at the same time = ONE line covering both.
 # ============================================================================================
 
-# examples (delete these two lines):
-# C3905  0:12.5 - 0:18.0  jaywalking
-# C3905  1:04.0 - 1:07.5  red_light
 
+# ---------------- C3896
+C3896  0:37 - 1:13  congestion
+C3896  2:18 - 2:32  congestion
+C3896  4:37 - 4:59  congestion
+C3896  1:13 - 1:19  failure_to_yield
+C3896  1:33 - 1:37  failure_to_yield
+C3896  2:37 - 2:43  failure_to_yield
+C3896  0:49 - 0:54  illegal_turn
+C3896  1:47 - 1:50  illegal_turn
+C3896  4:43 - 4:47  illegal_turn
+C3896  5:30 - 5:33  illegal_turn
+C3896  2:03 - 2:07  jaywalking
+C3896  2:45 - 2:50  jaywalking
+C3896  3:10 - 3:13  jaywalking
+C3896  3:59 - 4:13  jaywalking
+C3896  1:01 - 1:14  red_light
+C3896  1:18 - 1:21  red_light
+C3896  1:11 - 1:14  solid_line_crossing
+C3896  1:17 - 1:19  solid_line_crossing
+C3896  2:02 - 2:05  solid_line_crossing
+C3896  2:09 - 2:12  solid_line_crossing
+C3896  4:22 - 4:24  solid_line_crossing
+C3896  1:03 - 1:42  stop_line
+C3896  5:00 - 5:30  stopped_vehicle
+
+# ---------------- C3897
+# CHECK: 'C3897 0:?? - 0:45 jaywalking' had no start time - add it:
+# C3897  0:40 - 0:45  jaywalking
+# CHECK: solid_line_crossing 2:09 - 2:52 is 43 s long (a lane change takes 2-4 s) - typo? e.g. 2:09 - 2:12:
+# C3897  2:09 - 2:12  solid_line_crossing
+C3897  2:00 - 2:16  congestion
+C3897  1:04 - 1:06  failure_to_yield
+C3897  1:06 - 1:08  failure_to_yield
+C3897  4:57 - 4:59  failure_to_yield
+C3897  5:11 - 5:13  failure_to_yield
+C3897  2:52 - 2:54  illegal_turn
+C3897  1:32 - 1:34  illegal_u_turn
+C3897  0:04 - 0:20  jaywalking
+C3897  1:16 - 1:32  jaywalking
+C3897  3:58 - 4:05  jaywalking
+C3897  4:23 - 4:28  jaywalking
+C3897  4:53 - 5:03  jaywalking
+C3897  5:06 - 5:17.8  jaywalking
+C3897  0:51 - 0:55  solid_line_crossing
+C3897  2:06 - 2:08  solid_line_crossing
+C3897  3:14 - 3:16  solid_line_crossing
+C3897  3:22 - 3:24  solid_line_crossing
+C3897  4:49 - 4:52  solid_line_crossing
+C3897  4:56 - 5:00  solid_line_crossing
+C3897  0:00 - 0:21  stop_line
+C3897  0:00 - 0:28  stopped_vehicle
+C3897  2:32 - 2:52  stopped_vehicle
+C3897  3:30 - 4:10  stopped_vehicle
+
+# ---------------- C3902
+# (merged overlapping jaywalking 1:20-1:38 + 1:36-1:57 and 2:49-3:01 + 3:00-3:13)
+C3902  0:00 - 0:09  congestion
+C3902  0:51 - 1:25  congestion
+C3902  1:28 - 1:55  congestion
+C3902  4:25 - 4:32  congestion
+C3902  0:22 - 0:24  failure_to_yield
+C3902  0:52 - 0:54  failure_to_yield
+C3902  2:42 - 2:43  failure_to_yield
+C3902  2:54 - 2:55  failure_to_yield
+C3902  3:18 - 3:25  illegal_turn
+C3902  4:39 - 4:47  illegal_turn
+C3902  0:06 - 0:11  jaywalking
+C3902  0:22 - 0:31  jaywalking
+C3902  1:01 - 1:08  jaywalking
+C3902  1:20 - 1:57  jaywalking
+C3902  2:49 - 3:13  jaywalking
+C3902  3:45 - 4:00  jaywalking
+C3902  4:33 - 4:39  jaywalking
+C3902  1:03 - 1:07  near_miss
+C3902  3:18 - 3:25  solid_line_crossing
+C3902  4:39 - 4:47  solid_line_crossing
+C3902  4:14 - 4:37  stop_line
+
+# ---------------- C3905
+C3905  1:10 - 1:50  congestion
+C3905  0:20 - 0:25  failure_to_yield
+C3905  0:37 - 0:40  failure_to_yield
+C3905  1:38 - 1:41  illegal_turn
+C3905  0:00 - 0:03  jaywalking
+C3905  0:11 - 0:21  jaywalking
+C3905  0:53 - 0:55  jaywalking
+C3905  1:13 - 1:20  jaywalking
+C3905  1:40 - 1:55  jaywalking
+C3905  1:14 - 1:57  stop_line
