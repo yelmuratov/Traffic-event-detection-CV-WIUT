@@ -8,3 +8,4 @@ outputs/
 
 Claude outputs/
 dev_bundle.pkl.gz
+!docs/assets/video/*.mp4
