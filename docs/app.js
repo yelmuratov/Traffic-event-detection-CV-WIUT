@@ -1,5 +1,5 @@
 /* WannaCry site — all charts are drawn from assets/eda/eda.json and assets/results/results.json */
-const DEMO_URL = "https://huggingface.co/spaces/REPLACE_ME/wannacry-demo";   // set when the Space exists
+const DEMO_URL = "https://huggingface.co/spaces/DoniyorYuldosh/wannacry-demo";
 const VIDEO_DIR = "assets/video/";                                           // <stem>_annotated.mp4
 const VIDEOS = ["C3896.mp4", "C3897.mp4", "C3902.mp4", "C3905.mp4"];
 const CLASSES = ["accident", "near_miss", "red_light", "wrong_way", "illegal_u_turn", "stopped_vehicle",
@@ -20,7 +20,7 @@ const css = v => getComputedStyle(root).getPropertyValue(v).trim();
 
 /* ---------- demo */
 const demoEmbed = DEMO_URL.includes("REPLACE_ME") ? "" :
-  DEMO_URL.replace("https://huggingface.co/spaces/", "https://").replace(/\/([^/]+)$/, "-$1") + ".hf.space";
+  DEMO_URL.replace("https://huggingface.co/spaces/", "https://").replace(/\/([^/]+)$/, "-$1").toLowerCase().replace(/[_.]/g, "-") + ".hf.space";
 if (demoEmbed) document.getElementById("demoFrame").src = demoEmbed;
 else document.getElementById("demoFrame").style.height = "120px", document.getElementById("demoFrame").srcdoc = "<p style='font:16px system-ui;padding:24px;color:#56626f'>The live demo will appear here once the Hugging Face Space is online.</p>";
 for (const id of ["demoLink", "demoLink2"]) document.getElementById(id).href = DEMO_URL;
