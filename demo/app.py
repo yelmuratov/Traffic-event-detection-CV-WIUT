@@ -51,7 +51,7 @@ with gr.Blocks(title="WannaCry demo") as demo:
     gr.Markdown("## WannaCry · traffic event detection\n"
                 "Upload an **.mp4 from the WIUT hackathon camera** (up to **1 minute**, 300 MB). "
                 "The scene map is drawn for this junction, so other cameras will not give meaningful events. "
-                "Runs on a free CPU with YOLO11n: expect 2–4 minutes; the progress bar shows each stage.")
+                "Runs on a CPU with YOLO11n: expect 3–5 minutes for a 1-minute clip; the progress bar shows each stage.")
     inp = gr.Video(label="Input .mp4", sources=["upload"])
     btn = gr.Button("Detect events", variant="primary")
     with gr.Row():
