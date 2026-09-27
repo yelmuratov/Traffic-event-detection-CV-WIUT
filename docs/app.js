@@ -209,7 +209,9 @@ matchMedia("(prefers-color-scheme: dark)").addEventListener("change", redrawAll)
 
 /* ---------- team details (filled in once roles are confirmed) */
 const TEAM = {
-  // doniyor: { role: "…", did: "…" },
+  doniyor:     { role: "Computer vision", did: "Detection and tracking pipeline (YOLO11 + ByteTrack), GPU runs on Colab, runtime and Part B." },
+  salimbay:    { role: "Rules & data labelling", did: "Scene map, event rules and tuning, and our 77-event dev labels of the sample videos." },
+  muhammadjon: { role: "Website & demo", did: "Team website, EDA and result visualisations, and the live demo." },
 };
 for (const [k, v] of Object.entries(TEAM)) {
   const r = document.querySelector(`[data-role="${k}"]`), d = document.querySelector(`[data-did="${k}"]`);

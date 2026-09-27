@@ -169,8 +169,8 @@ predictions_samples.json   our output on the sample videos
 
 | Member | Role | What they did | Links |
 |---|---|---|---|
-| Doniyor Yuldashev | _to be confirmed_ | _to be confirmed_ | [LinkedIn](https://www.linkedin.com/in/doniyor-yuldashev/) · [GitHub](https://github.com/DoniyorbekYuldashev) |
-| Salimbay Elmuratov | _to be confirmed_ | _to be confirmed_ | [LinkedIn](https://www.linkedin.com/in/salimbayelmuratov/) · [GitHub](https://github.com/yelmuratov) |
-| Muhammadjon Saidov | _to be confirmed_ | _to be confirmed_ | [LinkedIn](https://www.linkedin.com/in/muhammadjon-saidov-710713206/) · [GitHub](https://github.com/muhammadjonsaidov) |
+| Doniyor Yuldashev | Computer vision | detection + tracking pipeline, GPU runs, runtime, Part B | [LinkedIn](https://www.linkedin.com/in/doniyor-yuldashev/) · [GitHub](https://github.com/DoniyorbekYuldashev) |
+| Salimbay Elmuratov | Rules & data labelling | scene map, event rules and tuning, dev labels | [LinkedIn](https://www.linkedin.com/in/salimbayelmuratov/) · [GitHub](https://github.com/yelmuratov) |
+| Muhammadjon Saidov | Website & demo | team website, EDA and result visualisations, live demo | [LinkedIn](https://www.linkedin.com/in/muhammadjon-saidov-710713206/) · [GitHub](https://github.com/muhammadjonsaidov) |
 
 Website: https://yelmuratov.github.io/Traffic-event-detection-CV-WIUT/ (source in `docs/`) · Live demo: Hugging Face Space (link on the website).
