@@ -19,13 +19,13 @@ The pipeline is a pre-trained detector and a tracker that turn the video into tr
 
 ```bash
 pip install -r requirements.txt
-bash weights/download.sh          # once, WITH internet: fetches the open YOLO11 weights into weights/
+# weights are included in weights/ (yolo11m.pt, yolo11s.pt, yolo11n.pt; 63 MB). If missing: bash weights/download.sh
 python run_submission.py --videos /data/test --out predictions.json
 python evaluate.py --pred predictions.json --gt ground_truth.json
 ```
 
 - Python ≥ 3.10; tested on Colab (T4, CUDA 12).
-- After `weights/download.sh` everything runs offline.
+- The model weights ship in `weights/`, so the two official commands run offline with no manual step. `weights/download.sh` re-fetches them from the Ultralytics release if needed.
 - `run.sh` does all of the above on `samples/` and validates the output format.
 - `predictions_samples.json` is our output on the 4 sample videos. It was produced by this code, and Part B was skipped for that run (`--no-risk`).
 
